@@ -24,10 +24,17 @@ function KAACV_OpeningFcn(hObject, eventdata, handles, varargin)
 handles.output = hObject;
 guidata(hObject, handles);
 
+% запоминаем начальные координаты осей
+setappdata(handles.FileAxes,'InitPosition',handles.FileAxes.Position);
+
 % вставляем картинки в кнопки
-handles.PlayPauseButton.CData = imread('Play.png');
-handles.FrameBackButton.CData = imread('FrameBack.png');
-handles.FrameForwardButton.CData = imread('FrameForward.png');
+try
+    handles.PlayPauseButton.CData = imread([cd '\Icons\Play.png']);
+    handles.FrameBackButton.CData = imread([cd '\Icons\FrameBack.png']);
+    handles.FrameForwardButton.CData = imread([cd '\Icons\FrameForward.png']);
+    handles.ZoomButton.CData = imread([cd '\Icons\Zoom+.png']);
+catch
+end
 
 scr_res = get(0, 'ScreenSize');     % получили разрешение экрана
 fig = get(handles.KAACV,'Position');  % получили координаты окна
@@ -75,8 +82,8 @@ if ~ ImPrTB
                     '"Image Processing Toolbox" is missing.'];
 end
        
-% вызываем выбор метода
-MethodMenu_Callback(hObject, eventdata, handles);
+% прячем все элементы панеи параметров метода обработки
+set(handles.ParametersPanel.Children,'Visible','off');
 
 if ~isempty(message_str)    % вывод сообщения
     questdlg([message_str; ...
@@ -117,12 +124,15 @@ end
 
 warning('on','all');
 
+% если русский язык выбран, будет 1
+rus = strcmp(handles.RussianLanguageMenu.Checked,'on');
+
 % выбираем файл для открытия
-if strcmp(handles.RussianLanguageMenu.Checked,'on')      % по языку
+if rus
     
     [FileName, PathName] = uigetfile(...
-        {'*.jpg;*.tif;*.tiff;*.bmp;*.png',...
-        'Изображения (*.jpg,*.tif,*.tiff,*.bmp,*.png)';...
+        {'*.jpeg;*.jpg;*.tif;*.tiff;*.bmp;*.png',...
+        'Изображения (*.jpeg,*.jpg,*.tif,*.tiff,*.bmp,*.png)';...
         '*.avi;*,mj2;*.mpg;*.mp4;*.m4v;*.mov;*.wmv;*.ogg;*.asf;*.asx',...
         'Видео (*.avi,*.mj2,*.mpg,*.mp4,*.m4v,*.mov,*.wmv,*.ogg,*.asf,*.asx)';...
         '*.*', 'All Files(*.*)'},...
@@ -130,8 +140,8 @@ if strcmp(handles.RussianLanguageMenu.Checked,'on')      % по языку
         [cd '\Test Materials']);
 else
         [FileName, PathName] = uigetfile(...
-        {'*.jpg;*.tif;*.tiff;*.bmp;*.png',...
-        'Image Files (*.jpg,*.tif,*.tiff,*.bmp,*.png)';...
+        {'*.jpeg;*.jpg;*.tif;*.tiff;*.bmp;*.png',...
+        'Image Files (*.jpeg,*.jpg,*.tif,*.tiff,*.bmp,*.png)';...
         '*.avi;*,mj2;*.mpg;*.mp4;*.m4v;*.mov;*.wmv;*.ogg;*.asf;*.asx',...
         'Video Files (*.avi,*.mj2,*.mpg,*.mp4,*.m4v,*.mov,*.wmv,*.ogg,*.asf,*.asx)';...
         '*.*', 'All Files(*.*)'},...
@@ -143,40 +153,36 @@ if ~FileName        % Проверка, был ли выбран файл
     return;
 end
 
-UserFile = struct('Video',[],'Image',[],'FrameRate',[]);   % выделяем память
+% выделяем память
+UserFile = struct('Data',[],'FrameRate',[]);   
 
 try         % пробуем открыть как видеофайл
     
     VideoObject = VideoReader([PathName FileName]); % видеообъект
     VideoInfo = readFrame(VideoObject);             % читаем первый кадр
     
-    UserFile.Video = zeros(size(VideoInfo));        % создаем размер для структуры
+    UserFile.Data = zeros(size(VideoInfo));        % создаем размер для структуры
     
-    frame = 1;                                      % счетчик кадров
+    FrameNumber = 1;                                      % счетчик кадров
     NumOfFrames = round(VideoObject.Duration * VideoObject.FrameRate);
     
     Wait = waitbar(0,'Загрузка видео','WindowStyle','modal');
 
     while hasFrame(VideoObject)                         % пока есть кадр
-        UserFile(frame).Video = readFrame(VideoObject); % кидаем в структуру
-        frame = frame+1;                                % счетчик +
-        waitbar(frame / NumOfFrames, Wait);             % рисуем прогрузку
+        UserFile(FrameNumber).Data = readFrame(VideoObject); % кидаем в структуру
+        FrameNumber = FrameNumber+1;                                % счетчик +
+        waitbar(FrameNumber / NumOfFrames, Wait);             % рисуем прогрузку
     end    
     
     delete(Wait);       % удаляем загрузки окно
     
-    % вставляем первый кадр в ось
-    image(VideoInfo,'Parent',handles.FileAxes);
-    handles.FileAxes.Visible = 'off';
-    
     % записываем свойства видео
-    UserFile(1).FrameRate = VideoObject.FrameRate;
+    UserFile(1).FrameRate = VideoObject.FrameRate;            
     
-    % устанавливаем слайдер кадров
-    handles.FrameSlider.Value = 1;
     handles.FrameSlider.Min = 1;
-    handles.FrameSlider.Max = NumOfFrames;
-    handles.FrameSlider.SliderStep = [1/(NumOfFrames-1) 10/(NumOfFrames-1)];
+    handles.FrameSlider.Max = size(UserFile,2);
+    handles.FrameSlider.SliderStep = ...
+        [1/(size(UserFile,2)-1) 10/(size(UserFile,2)-1)];
     
     % открываем кнопки воспроизведения
     set([...
@@ -184,7 +190,13 @@ try         % пробуем открыть как видеофайл
         handles.FrameBackButton;...
         handles.FrameForwardButton;...
         handles.FrameSlider;...
-        ],'Visible','on');
+        handles.VideoFrameInfo;...
+        handles.VideoTimeInfo;...
+        ],'Visible','on');    
+    
+    set([...
+        handles.SaveFrameMenu;...
+        ],'Enable','on');
     
 catch       % не смогли открыть видеофайл
     
@@ -197,25 +209,28 @@ catch       % не смогли открыть видеофайл
         
         [Temp,colors] = imread([PathName FileName]);      
         
-        if ~isempty(colors)
+        if ~isempty(colors)                 % если индексированное -
             Temp = ind2rgb(Temp,colors);    % индексированное в RGB
         end  
         
-        UserFile.Image = Temp;              % запиливаем RGB
-        
-        % вставляем изображение
-        imshow(UserFile.Image,'Parent',handles.FileAxes);
-        
+        UserFile.Data = Temp;               % запиливаем картинку     
+                
         set([...
             handles.PlayPauseButton;...
             handles.FrameBackButton;...
             handles.FrameForwardButton;...
             handles.FrameSlider;...
+            handles.VideoFrameInfo;...
+            handles.VideoTimeInfo;...
             ],'Visible','off');
+        
+        set([...
+            handles.SaveFrameMenu;...
+            ],'Enable','off');        
         
     catch    % оба варианты открытия провалились
         
-        if strcmp(handles.RussianLanguageMenu.Checked,'on')     % язык
+        if rus     % язык
             h = errordlg('С файлом что-то не так. Откройте другой','KAACV');
         else
             h = errordlg('File is improper. Choose another file','KAACV');
@@ -226,28 +241,82 @@ catch       % не смогли открыть видеофайл
     end
 end
 
-% открываем/разблокируем все нужные элементы
+%%%%%%%%%%%%%%%%%%%%% после открытия
 
+% записываю удачно открытый файл в данные оси
+setappdata(handles.FileAxes,'UserFile',UserFile);
+
+% устанавливаем слайдер кадров    
+MethodMenu_Callback(hObject, eventdata, handles);
+
+% открываем/разблокируем все нужные элементы
 set([...
     handles.ParametersPanel;...
     handles.MethodMenu;...
     handles.ApplyButton;...
+    handles.ZoomButton;...
     ],'Visible','on');
 
 set([...
     handles.ShowFrameMenu;...
     ],'Enable','on');
 
-% записываю удачно открытый файл
+% настравием ось под размеры видоса и если можно растянуть - видим кнопку
+if SetAxesSize(handles.FileAxes,size(UserFile(1).Data,1),size(UserFile(1).Data,2))
+    handles.ZoomButton.Visible = 'on';
+else
+    handles.ZoomButton.Visible = 'off';
+end
 
-setappdata(handles.FileAxes,'UserFile',UserFile);
+% создаю объект-картинку, а слайдером потом лишь обновляем CData
+image(  UserFile(1).Data,...
+        'Parent',handles.FileAxes,...
+        'Tag', 'FrameObj');
+
+% установка меню обработок    
+MethodMenuSetting(handles.MethodMenu, size(UserFile,2) > 1, rus);
+
+handles.PlayPauseButton.Value = 0;      % ставим на паузу
+handles.FrameSlider.Value = 1;          % выставляю на слайдере номер первого кадра   
+FrameSlider_Callback(hObject, eventdata, handles);
 
 
-
-
-
-% "ПОКАЗАТЬ КАДР"
+% "ПОКАЗАТЬ КАДРА/ИЗОБРАЖЕНИЯ"
 function ShowFrameMenu_Callback(hObject, eventdata, handles)
+
+% считываем файл
+UserFile = getappdata(handles.FileAxes,'UserFile');
+
+% вытаскиваем кадр
+Image = UserFile(handles.FrameSlider.Value).Data;
+
+% пробуем открыть так или так
+try
+    imtool(Image);              % для матлаб-версии
+catch
+    OpenImageOutside(Image);    % для exe-версии
+end
+
+
+% "СОХРАНИТЬ КАДР"
+function SaveFrameMenu_Callback(hObject, eventdata, handles)
+
+% считываем файл
+UserFile = getappdata(handles.FileAxes,'UserFile');
+
+% вытаскиваем кадр
+Image = UserFile(handles.FrameSlider.Value).Data;
+FrameNumber = handles.FrameSlider.Value;
+
+if strcmp(handles.RussianLanguageMenu.Checked,'on')      % по языку
+    [FileName, PathName] = uiputfile(['кадр № ' num2str(FrameNumber) '.png'],'Сохранить кадр/изображение');
+else
+    [FileName, PathName] = uiputfile(['frame № ' num2str(FrameNumber) '.png'],'Save frame/image');
+end
+
+if FileName~=0
+    imwrite(Image,[PathName FileName]);
+end
 
 
 % "ПОКАЗАТЬ ШАБЛОН"
@@ -308,6 +377,54 @@ function MethodMenu_Callback(hObject, eventdata, handles)
 % прячем все элементы
 set(handles.ParametersPanel.Children,'Visible','off');
 
+% считываем файл
+UserFile = getappdata(handles.FileAxes,'UserFile');
+width = size(UserFile(1).Data,2);
+heigth = size(UserFile(1).Data,1);
+
+switch handles.MethodMenu.Value
+    
+    case 1      % Распознавание текста
+        
+        set([...
+            handles.ROIx0;...
+            handles.ROIy0;...
+            handles.ROIx1;...
+            handles.ROIy1;...
+            handles.ROIButton;...
+            handles.ROIText;...
+            ],'Visible','on');
+        
+        handles.ROIx0.String = num2str(1);
+        handles.ROIy0.String = num2str(1);
+        handles.ROIx1.String = num2str(width);
+        handles.ROIy1.String = num2str(heigth);
+        
+        ROIButton_Callback(hObject, eventdata, handles);
+        
+        
+    case 2      % Чтение штрих-кода
+        
+    case 3      % Поиск областей с текстом
+        
+    case 4      % Анализ пятен
+        
+    case 5      % Распознавание лиц
+        
+    case 6      % Распознавание людей
+        
+    case 7      % Распознавание объектов
+        
+    case 8      % Создание 3D-изображения
+        
+    case 9      % Обработка видео
+        
+    case 10     % Создание панорамы
+        
+    case 11     % Распознавание движения
+        
+end
+
 
 % ВЫБОР ОТОБРАЖАЕМОГО ВИДЕО
 function VideoMenu_Callback(hObject, eventdata, handles)
@@ -335,39 +452,49 @@ function ParMenu4_Callback(hObject, eventdata, handles)
 % ВОСПРОИЗВЕДЕНИЕ / ПАУЗА
 function PlayPauseButton_Callback(hObject, eventdata, handles)
 
+% ЗДЕСЬ МЫ ОБНОВЛЯЕМ КАДР И ВЫЗЫВАЕМ СЛАЙДЕР, КОТОРЫЙ И ПОКАЖЕТ КАДР
+
 % меняем картинку кнопки и блокируем соседей
 if handles.PlayPauseButton.Value == 0
-    handles.PlayPauseButton.CData = imread('Play.png');
+    
+    try
+        handles.PlayPauseButton.CData = imread([cd '\Icons\Play.png']);
+    catch
+    end
+    
     handles.FrameBackButton.Enable = 'on';
-    handles.FrameForwardButton.Enable = 'on';    
+    handles.FrameForwardButton.Enable = 'on';
+    handles.FrameSlider.Enable = 'on';
     
-else    
+else
+    try
+        handles.PlayPauseButton.CData = imread([cd '\Icons\Pause.png']);
+    catch
+    end
     
-    handles.PlayPauseButton.CData = imread('Pause.png');
     handles.FrameBackButton.Enable = 'off';
     handles.FrameForwardButton.Enable = 'off';
+    handles.FrameSlider.Enable = 'off';
     
-    % считываем частоту кадров
+    % считываем файл и частоту кадров
     UserFile = getappdata(handles.FileAxes,'UserFile'); 
     FrameRate = UserFile(1).FrameRate;
     
     % прогоняем кадры
-    for frame = handles.FrameSlider.Value : handles.FrameSlider.Max
-        image(UserFile(frame).Video, 'Parent', handles.FileAxes);
-        handles.FileAxes.Visible = 'off';
-        handles.FrameSlider.Value = frame;  % установка слайдера
- 
-        sec = mod(frame / FrameRate, 60);       % остаток в сек.
-        min = (frame / FrameRate - sec) / 60;   % мин
-        sec = round(sec);                       % остаток в сек.
-        
-        ShowTimeAndFrame(handles, frame, min, sec);
+    for FrameNumber = handles.FrameSlider.Value : handles.FrameSlider.Max
+                
+        handles.FrameSlider.Value = FrameNumber;
+        FrameSlider_Callback(hObject, eventdata, handles);
         
         pause(1/FrameRate);
         
         % если прервали на паузу
-        if handles.PlayPauseButton.Value == 0   
-            handles.PlayPauseButton.CData = imread('Play.png');
+        if handles.PlayPauseButton.Value == 0  
+            try
+                handles.PlayPauseButton.CData = imread([cd '\Icons\Play.png']);
+            catch
+            end
+            
             handles.FrameBackButton.Enable = 'on';
             handles.FrameForwardButton.Enable = 'on';
             return;
@@ -379,40 +506,95 @@ end
 % ПРЕДЫДУЩИЙ КАДР 
 function FrameBackButton_Callback(hObject, eventdata, handles)
 
-frame = handles.FrameSlider.Value - 1;  % считываем кадр
+FrameNumber = handles.FrameSlider.Value - 1;  % считываем кадр
 
-if frame < handles.FrameSlider.Min
-    frame = handles.FrameSlider.Min;
+if FrameNumber < handles.FrameSlider.Min
+    FrameNumber = handles.FrameSlider.Min;
 end
 
-FrameSlider_Callback(hObject, frame, handles)
+handles.FrameSlider.Value = FrameNumber;
+FrameSlider_Callback(hObject, eventdata, handles);
 
 
 % СЛЕДУЮЩИЙ КАДР
 function FrameForwardButton_Callback(hObject, eventdata, handles)
 
-frame = handles.FrameSlider.Value + 1;  % считываем кадр
+FrameNumber = handles.FrameSlider.Value + 1;  % считываем кадр
 
-if frame > handles.FrameSlider.Max
-    frame = handles.FrameSlider.Max;
+if FrameNumber > handles.FrameSlider.Max
+    FrameNumber = handles.FrameSlider.Max;
 end
 
-FrameSlider_Callback(hObject, frame, handles)
+handles.FrameSlider.Value = FrameNumber;
+FrameSlider_Callback(hObject, eventdata, handles);
 
 
 % ПРИМЕНИТЬ
 function ApplyButton_Callback(hObject, eventdata, handles)
 
+% считываем файл и частоту кадров
+UserFile = getappdata(handles.FileAxes,'UserFile');
+    
 % показываем, что процесс применения длителен: при нажатии
-if handles.ApplyButton.Value == 1
-    handles.ApplyButton.String = 'Применяется';
+if size(UserFile,2) > 1             % для видеофайла
+    if handles.ApplyButton.Value == 1
+        handles.ApplyButton.String = 'Применяется';
+    else
+        handles.ApplyButton.String = 'Применить';
+    end
+    
 else
-    handles.ApplyButton.String = 'Применить';
+    handles.ApplyButton.Value = 0;  % снимаем нажатое состояние    
+end
+
+
+% УВЕЛИЧЕНИЕ РАЗМЕРА ВИДЕО ПОД РАЗМЕР ОСИ
+function ZoomButton_Callback(hObject, eventdata, handles)
+
+% считываем файл
+UserFile = getappdata(handles.FileAxes,'UserFile');
+
+    
+if handles.ZoomButton.Value == 0    
+    
+    try
+        handles.ZoomButton.CData = imread([cd '\Icons\Zoom+.png']);
+    catch
+    end
+    
+    SetAxesSize(handles.FileAxes,size(UserFile(1).Data,1),size(UserFile(1).Data,2));
+    
+else
+    try
+        handles.ZoomButton.CData = imread([cd '\Icons\Zoom-.png']);
+    catch
+    end
+    
+    % считываем начальный размер, выделенный для оси
+    AxesSize = getappdata(handles.FileAxes,'InitPosition');
+    
+    % выбираем минимум, на который можем растянуть габариты и считаем их
+    height = size(UserFile(1).Data,1) / ...
+        min(size(UserFile(1).Data,1)/AxesSize(4) , size(UserFile(1).Data,2)/AxesSize(3));
+    
+    width = size(UserFile(1).Data,2) / ...
+        min(size(UserFile(1).Data,1)/AxesSize(4) , size(UserFile(1).Data,2)/AxesSize(3));
+    
+    SetAxesSize(handles.FileAxes, height, width);      
 end
 
 
 % ВЫБОР ОБЛАСТИ ИНТЕРЕСА
 function ROIButton_Callback(hObject, eventdata, handles)
+
+% если надаж на кнопку, значит нарисуем прямоугольник
+if hObject == handles.ROIButton     
+    
+   h =  imrect(handles.FileAxes);
+    
+else    % иначе он поменял координату в полях
+    
+end
 
 
 % ОТКРЫТЬ ШАБЛОН
@@ -425,25 +607,25 @@ function PatternOpenButton_Callback(hObject, eventdata, handles)
 % СЛАЙДЕР КАДРОВ ВИДЕО
 function FrameSlider_Callback(hObject, eventdata, handles)
 
-% считываем видос
+% СЛАЙДЕР ЗАНИМАЕТСЯ ОБНОВЛЕНИЕМ ДАННЫХ ОБЪЕКТА-КАРТИНКИ В ОСИ !!!
+
+% считываем файл
 UserFile = getappdata(handles.FileAxes,'UserFile');
 
-if ~isnumeric(eventdata)
-    frame = round(handles.FrameSlider.Value);
-else
-    frame = eventdata;
+FrameNumber = round(handles.FrameSlider.Value); % считываем номер кадра
+
+handles.FrameSlider.Value = FrameNumber;      % установка слайдера
+
+% обновили CData, не создавая новый объект
+set(findobj('Parent',handles.FileAxes,'Tag', 'FrameObj'),...
+    'CData',UserFile(FrameNumber).Data);
+
+handles.FileAxes.Visible = 'off';                                  
+
+% прописываем кадр и время только для видео
+if size(UserFile,2) > 1
+    ShowTimeAndFrame(handles, UserFile(1).FrameRate, FrameNumber);         
 end
-
-handles.FrameSlider.Value = frame;      % установка слайдера
-
-image(UserFile(frame).Video, 'Parent', handles.FileAxes);
-handles.FileAxes.Visible = 'off';
- 
-sec = mod(frame / UserFile(1).FrameRate, 60);       % остаток в сек.
-min = (frame / UserFile(1).FrameRate - sec) / 60;   % мин
-sec = round(sec);                                   % остаток в сек.
-
-ShowTimeAndFrame(handles, frame, min, sec);         % прописываем
 
 
 % СЛАЙДЕР ПАРАМЕТРОВ № 1
@@ -510,23 +692,96 @@ function ParCheckBox2_Callback(hObject, eventdata, handles)
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%% ФУНКЦИИ %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-% ПРОПИСЫВАЕТ СТРОЧКУ С КАДРОМ И ТЕКУЩИМ ВРЕМЕНЕМ ВИДЕО
-function ShowTimeAndFrame(handles, frame, min, sec)
+% ПРОПИСЫВАЕТ СТРОЧКИ С КАДРОМ И ТЕКУЩИМ ВРЕМЕНЕМ ВИДЕО
+function ShowTimeAndFrame(handles, FrameRate, FrameNumber)
 
+% handles - массив указателей приложения
+% FrameRate - скорость воспроизведения видео
+% FrameNumber - номер текущего кадра
+
+sec = mod(FrameNumber / FrameRate, 60);       % остаток в сек.
+min = (FrameNumber / FrameRate - sec) / 60;   % мин.
+sec = round(sec);
+        
 if sec == 60            % делаем 59 сек крайними
     sec = 0;
     min = min + 1;
 end
 
-% тут вставить sprintf
-handles.VideoInfo.String = ...
-    [{[num2str(frame) ' кадр']}; {[num2str(min) ':' num2str(sec)]}];
+handles.VideoTimeInfo.String = [sprintf('%02d',min) ':' sprintf('%02d',sec)];
+handles.VideoFrameInfo.String = [num2str(FrameNumber) ' кадр'];
 
 
+% НАСТРАИВАЕТ РАЗМЕР ОСИ ПОД ВИДЕО/ИЗОБРАЖЕНИЕ
+function zoom = SetAxesSize(hObject, height, width)
+
+% hObject - ось, в которую вставляем кадр/изорбажение
+% height, width - габариты кадра/изорбажения
+% zoom = 1 - можно еще растягивать кадр/изорбажение под ось
+% zoom = 0 - некуда растягивать кадр/изорбажение под ось
+
+zoom = true;        
+    
+% считываем начальный размер, выделенный для оси
+AxesSize = getappdata(hObject,'InitPosition');  
+
+% выясняем, ширина или высота страдает больше
+% если не влезают в выделенную ось, меняем габариты по страдальцу
+
+if max(width/AxesSize(3), height/AxesSize(4)) > 1
+    
+    zoom = false;   % нельзя
+    width = width / max(width/AxesSize(3), height/AxesSize(4));
+    height = height / max(width/AxesSize(3), height/AxesSize(4));
+end
+    
+x = AxesSize(1) + round((AxesSize(3) - width)/2);
+y = AxesSize(2) + round((AxesSize(4) - height)/2);
+
+set(hObject, 'Position', [x y width height]);
 
 
+% НАСТРАИВАЕТ СПИСОК МЕТОДОВ ОБРАБОТКИ
+function MethodMenuSetting(MethodMenu, VideoOpened, rus)
 
+% MethodMenu - настраиваемая менюшка
+% VideoOpened - если открыто видео - тогда истина
+% rus - если 1, тогда русский язык стоит
 
-
+if VideoOpened          % для открытого видео-файла
+    if rus              % на русском
+        
+        set(MethodMenu,'String',{...
+            'Распознавание текста';...
+            'Чтение штрих-кода';...
+            'Поиск областей с текстом';...
+            'Анализ пятен';...
+            'Распознавание лиц';...
+            'Распознавание людей';...
+            'Распознавание объектов';...
+            'Создание 3D-изображения';...
+            'Обработка видео';...
+            'Создание панорамы';...
+            'Распознавание движения';...
+            });       
+        
+    else                % на английском
+        
+    end
+        
+else                    % если открыто изображение
+    
+        set(MethodMenu,'String',{...
+            'Распознавание текста';...
+            'Чтение штрих-кода';...
+            'Поиск областей с текстом';...
+            'Анализ пятен';...
+            'Распознавание лиц';...
+            'Распознавание людей';...
+            'Распознавание объектов';...
+            'Создание 3D изображения';...
+            });
+end
+    
 
 
