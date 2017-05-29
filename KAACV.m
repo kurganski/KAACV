@@ -106,20 +106,17 @@ function OpenMenu_Callback(hObject, eventdata, handles)
 
 %%%%%%%%%%%%% ПРОВЕРКИ
 
-if isempty(handles)            % значит неумный человек запустил fig вместо m  
+if isempty(handles)       % значит неумный человек запустил fig вместо m  
     
     questdlg({  'Вы запустили файл с расширением *.fig вместо расширения *.m.';...
                 'Нажмите "OK", и все будет хорошо';
                 'You have started a file with expansion *.fig instead of *.m.';
                 'Press "OK" to make it OK'},...
                 'KAACV','OK','modal');
-    
-    % сюда зайдет в любом случае, цикл нужен, чтобы дождаться ответа
-    if true      
-        close(gcf);
-        run('KAACV.m');
-        return;
-    end
+       
+    close(gcf);
+    run('KAACV.m');
+    return;
 end
 
 warning('on','all');
@@ -246,9 +243,6 @@ end
 % записываю удачно открытый файл в данные оси
 setappdata(handles.FileAxes,'UserFile',UserFile);
 
-% устанавливаем слайдер кадров    
-MethodMenu_Callback(hObject, eventdata, handles);
-
 % открываем/разблокируем все нужные элементы
 set([...
     handles.ParametersPanel;...
@@ -263,9 +257,9 @@ set([...
 
 % настравием ось под размеры видоса и если можно растянуть - видим кнопку
 if SetAxesSize(handles.FileAxes,size(UserFile(1).Data,1),size(UserFile(1).Data,2))
-    handles.ZoomButton.Visible = 'on';
+    handles.ZoomButton.Enable = 'on';
 else
-    handles.ZoomButton.Visible = 'off';
+    handles.ZoomButton.Enable = 'off';
 end
 
 % создаю объект-картинку, а слайдером потом лишь обновляем CData
@@ -280,6 +274,9 @@ handles.PlayPauseButton.Value = 0;      % ставим на паузу
 handles.FrameSlider.Value = 1;          % выставляю на слайдере номер первого кадра   
 FrameSlider_Callback(hObject, eventdata, handles);
 
+% запускаем меню с обработкой  
+MethodMenu_Callback(hObject, eventdata, handles);
+
 
 % "ПОКАЗАТЬ КАДРА/ИЗОБРАЖЕНИЯ"
 function ShowFrameMenu_Callback(hObject, eventdata, handles)
@@ -293,6 +290,30 @@ Image = UserFile(handles.FrameSlider.Value).Data;
 % пробуем открыть так или так
 try
     imtool(Image);              % для матлаб-версии
+catch
+    OpenImageOutside(Image);    % для exe-версии
+end
+
+
+% ПРОСМТОР ROI
+function RoiShowMenu_Callback(hObject, eventdata, handles)
+
+% считываем файл
+UserFile = getappdata(handles.FileAxes,'UserFile');
+
+% вытаскиваем кадр
+Image = UserFile(handles.FrameSlider.Value).Data;
+
+X0 = round(str2double(handles.ROIx0.String));
+X1 = round(str2double(handles.ROIx1.String));
+Y0 = round(str2double(handles.ROIy0.String));
+Y1 = round(str2double(handles.ROIy1.String));
+    
+Image = Image(Y0:Y1,X0:X1,:);
+
+% пробуем открыть так или так
+try
+    fig = imtool(Image);              % для матлаб-версии
 catch
     OpenImageOutside(Image);    % для exe-версии
 end
@@ -374,8 +395,9 @@ handles.RussianLanguageMenu.Checked = 'off';
 % ВЫБОР МЕТОДА ОБРАБОТКИ
 function MethodMenu_Callback(hObject, eventdata, handles)
 
-% прячем все элементы
+% прячем все элементы и блокируем некоторые меню
 set(handles.ParametersPanel.Children,'Visible','off');
+handles.RoiShowMenu.Enable = 'off';
 
 % считываем файл
 UserFile = getappdata(handles.FileAxes,'UserFile');
@@ -399,6 +421,13 @@ switch handles.MethodMenu.Value
         handles.ROIy0.String = num2str(1);
         handles.ROIx1.String = num2str(width);
         handles.ROIy1.String = num2str(heigth);
+        
+        handles.ROIx0.Value = 1;
+        handles.ROIy0.Value = 1;
+        handles.ROIx1.Value = width;
+        handles.ROIy1.Value = heigth;
+        
+        handles.RoiShowMenu.Enable = 'on';
         
         ROIButton_Callback(hObject, eventdata, handles);
         
@@ -585,15 +614,62 @@ end
 
 
 % ВЫБОР ОБЛАСТИ ИНТЕРЕСА
-function ROIButton_Callback(hObject, eventdata, handles)
+function ROIButton_Callback(hObject, ~, handles)
+
+% удаляем рамку в оси
+delete(findobj('Parent',handles.FileAxes,'LineStyle','--'));
+
+% считываем файл
+UserFile = getappdata(handles.FileAxes,'UserFile');
+w = size(UserFile(1).Data,2);
+h = size(UserFile(1).Data,1);
 
 % если надаж на кнопку, значит нарисуем прямоугольник
-if hObject == handles.ROIButton     
+if hObject == handles.ROIButton         
     
-   h =  imrect(handles.FileAxes);
+    ROI =  imrect(handles.FileAxes);    % даем пользователю выбрать
+    coords = round(getPosition(ROI));   % считываем выбранные координаты
+    delete(ROI);                        % удаляем созданный интерактивный объект
+    
+    coords(3) = coords(3) + coords(1);  % получаем координаты x1 и y1
+    coords(4) = coords(4) + coords(2);
+    
+    % проверяем координаты
+    coords = LimitCheck(coords,...
+                [1 1 w h],...
+                [false false true true]);
+    
+    handles.ROIx0.String = num2str(coords(1));    
+    handles.ROIy0.String = num2str(coords(2));    
+    handles.ROIx1.String = num2str(coords(3));    
+    handles.ROIy1.String = num2str(coords(4)); 
+    
+    handles.ROIx0.Value = coords(1);
+    handles.ROIy0.Value = coords(2);
+    handles.ROIx1.Value = coords(3);
+    handles.ROIy1.Value = coords(4);   
+    
+    coords(3) = coords(3) - coords(1);  % прпеобразуем координаты x1 и y1
+    coords(4) = coords(4) - coords(2);  % в длину и ширину
+    
+    rectangle(  'Position',coords,...
+                'Parent',handles.FileAxes,...
+                'EdgeColor','r',...
+                'LineStyle','--',...
+                'LineWidth',2);     
     
 else    % иначе он поменял координату в полях
+   
+    X0 = round(str2double(handles.ROIx0.String));
+    X1 = round(str2double(handles.ROIx1.String));
+    Y0 = round(str2double(handles.ROIy0.String));
+    Y1 = round(str2double(handles.ROIy1.String));
     
+    rectangle(  'Position',[X0 Y0 X1-X0 Y1-Y0],...
+                'Parent',handles.FileAxes,...
+                'EdgeColor','r',...
+                'LineStyle','--',...
+                'LineWidth',2);
 end
 
 
@@ -669,16 +745,58 @@ function StatisticsList_Callback(hObject, eventdata, handles)
 %%%%%%%%%%%%%%%%%%%%%%%%%%%% ТЕКСТОВЫЕ ПОЛЯ %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 
-function ROIx0_Callback(hObject, eventdata, handles)
+function ROIedit_Callback(hObject, eventdata, handles)
 
+% считываем файл
+UserFile = getappdata(handles.FileAxes,'UserFile');
 
-function ROIy0_Callback(hObject, eventdata, handles)
+Value = str2double(get(hObject,'String'));     % считал значение вызываемого поля 
 
+if isnan(Value)                            % если не число - ошибка
+    
+    if strcmp(handles.RussianLanguageMenu.Checked,'on')
+        errordlg('Введите в строку числовое значение','KAACV');
+    else
+        errordlg('Use digits only in this field','KAACV');
+    end
+    
+    set(gcf,'WindowStyle', 'modal');
+    
+    set(hObject,'String',num2str(get(hObject,'Value')));
+    return;
+end
 
-function ROIx1_Callback(hObject, eventdata, handles)
+Value = round(Value);               % округлим
 
+% находим максимум и минимум для изменяемой величины
+switch hObject
+    
+    case handles.ROIy0
+        MaxValue = str2double(handles.ROIy1.String);
+        MinValue = 1;
+        
+    case handles.ROIy1
+        MaxValue = size(UserFile(1).Data,1);
+        MinValue = str2double(handles.ROIy0.String);
+        
+    case handles.ROIx0
+        MaxValue = str2double(handles.ROIx1.String);
+        MinValue = 1;
+        
+    case handles.ROIx1
+        MaxValue = size(UserFile(1).Data,2);
+        MinValue = str2double(handles.ROIx0.String);
+end
 
-function ROIy1_Callback(hObject, eventdata, handles)
+if Value < MinValue     % при выходе за пределы присваиваем предельное значение
+    Value = MinValue;
+    
+elseif Value > MaxValue
+    Value = MaxValue;
+end
+
+set(hObject,'String',num2str(Value),'Value',Value);
+ROIButton_Callback(hObject, eventdata, handles);
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%% ЧЕК-БОКСЫ %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -782,6 +900,42 @@ else                    % если открыто изображение
             'Создание 3D изображения';...
             });
 end
+    
+
+% проверяет выход за предел
+function value = LimitCheck(number,limit,upper)
+
+assert(isnumeric([number limit]) && islogical(upper),...
+                'Некорректные входные данные');
+            
+assert(length(number) == length(limit) && length(limit) == length(upper),...
+                'Размерности входных данных не равны');
+
+% number - проверяемое число
+% limit - предел
+% upper = true - предел сверху
+% upper = false - предел снизу
+
+value = number;
+
+for x = 1:length(number)
+    
+    if upper(x)                % предел сверху
+        if number(x) > limit(x)
+            value(x) = limit(x);
+        end
+    else                    % предел снизу
+        if number(x) < limit(x)
+            value(x) = limit(x);
+        end
+    end
+end
+    
+    
+    
+    
+    
+    
     
 
 
