@@ -97,7 +97,8 @@ if ~isempty(message_str)    % вывод сообщения
 end 
 
 % не хватает отображений предобраток (текущих картинок, а не только оригинала)
-
+% исправить в kaaip brisk пределы (30 14000)
+% там же поправить в бинаризации - брать 3 канала для rgb, а не 1
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%% МЕНЮ %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 
@@ -287,10 +288,19 @@ image(  UserFile(1).Data,...
 % установка меню обработок    
 MethodMenuSetting(handles.MethodMenu, size(UserFile,2) > 1, rus);
 
+% кнопку зума в начальное положение
+handles.ZoomButton.Value = 0;
+ZoomButton_Callback(hObject, eventdata, handles);
+
 handles.PlayPauseButton.Value = 0;      % ставим на паузу
+PlayPauseButton_Callback(hObject, eventdata, handles);  % меняем картинку
 
 handles.ApplyButton.Value = 0;              % отжимаем кнопку обработки
-handles.ApplyButton.String = 'Применить';   % поменяем надпись на ней
+if rus
+    handles.ApplyButton.String = 'Применить';   % поменяем надпись на ней
+else
+    handles.ApplyButton.String = 'Apply';   % поменяем надпись на ней
+end
 
 handles.FrameSlider.Value = 1;          % выставляю номер первого кадра  
 FrameSlider_Callback(hObject, eventdata, handles);  % обновляю № кадра и сек
