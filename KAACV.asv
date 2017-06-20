@@ -1497,7 +1497,8 @@ switch ProcessParameters.ComputerVisionMethod
     case {'Распознавание объектов','Object detection'}
         
         ProcessParameters.Pattern = getappdata(handles.KAACV,'Pattern');
-               
+        
+        % считываем показания слайдеров и меню        
         ProcessParameters.Slider1Value =    handles.ParSlider1.Value;
         ProcessParameters.Slider2Value =    handles.ParSlider2.Value;
         ProcessParameters.Slider3Value =    handles.ParSlider3.Value;
@@ -1542,7 +1543,9 @@ switch ProcessParameters.ComputerVisionMethod
                 ProcessParameters.Metric = 'SSD';
             otherwise
                 assert(0,'Что то пошло не так...Выбрали не существующую строчку меню');
-        end               
+        end
+        
+        
         
     case {'Создание 3D-изображения','3-D image creation'}
         
@@ -1569,8 +1572,8 @@ setappdata(handles.KAACV,'ImagesToShow',ProcessResults.ImagesToShow.Images);
 image(ProcessResults.NewPattern,'Parent',handles.PatternAxes);
 handles.PatternAxes.Visible = 'off';
 
-handles.StatisticsList.String = string(ProcessResults.StatisticsString);    
-handles.VideoMenu.String = string(ProcessResults.StringOfImages);
+handles.StatisticsList.String = ProcessResults.StatisticsString';    
+handles.VideoMenu.String = string(ProcessResults.StringOfImages');
 
 % если отображать нужно лишь оригинал, прячем выпадающий список
 if length(ProcessResults.StringOfImages) == 1
