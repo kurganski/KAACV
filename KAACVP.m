@@ -1,16 +1,18 @@
-
-
-
+%---------------------------------------------------------------------------------
+% KAACVP:           Kurganski Andrew A Computer Vision Processor
+% Autor / Автор:    Andrew A Kurganski / Курганский Андрей Андреевич
+% e-mail:           k-and92@mail.ru
+%---------------------------------------------------------------------------------
 
 
 %%%% ИНИЦИАЛИЗАЦИЯ ПРИЛОЖЕНИЯ
-function varargout = KAACV(varargin)
+function varargout = KAACVP(varargin)
 
 gui_Singleton = 1;
 gui_State = struct('gui_Name',       mfilename, ...
                    'gui_Singleton',  gui_Singleton, ...
-                   'gui_OpeningFcn', @KAACV_OpeningFcn, ...
-                   'gui_OutputFcn',  @KAACV_OutputFcn, ...
+                   'gui_OpeningFcn', @KAACVP_OpeningFcn, ...
+                   'gui_OutputFcn',  @KAACVP_OutputFcn, ...
                    'gui_LayoutFcn',  [] , ...
                    'gui_Callback',   []);
 if nargin && ischar(varargin{1})
@@ -22,11 +24,11 @@ if nargout
 else
     gui_mainfcn(gui_State, varargin{:});
 end
-function varargout = KAACV_OutputFcn(~, ~, handles) 
+function varargout = KAACVP_OutputFcn(~, ~, handles) 
 varargout{1} = handles.output;
 
 % ФУНКЦИЯ ПРИ ОТКРЫТИИ
-function KAACV_OpeningFcn(hObject, ~, handles, varargin)
+function KAACVP_OpeningFcn(hObject, ~, handles, varargin)
 
 handles.output = hObject;
 guidata(hObject, handles);
@@ -52,10 +54,10 @@ catch
 end
 
 scr_res = get(0, 'ScreenSize');         % получили разрешение экрана
-fig = get(handles.KAACV,'Position');    % получили координаты окна
+fig = get(handles.KAACVP,'Position');    % получили координаты окна
 
 % отцентрировали окно
-set(handles.KAACV,'Position',...
+set(handles.KAACVP,'Position',...
     [(scr_res(3)-fig(3))/2 (scr_res(4)-fig(4))/2 fig(3) fig(4)]);
 
 % проверяем наличие тулбоксов нужной версии
@@ -71,19 +73,19 @@ language = true;
 if ~WeHaveCV && ~WeHaveIPT
     
     GenerateError('NoCV_NoIPT', language);
-    close(handles.KAACV);
+    close(handles.KAACVP);
     return;
     
 elseif ~WeHaveCV && WeHaveIPT
     
     GenerateError('NoCV', language);
-    close(handles.KAACV);
+    close(handles.KAACVP);
     return;
     
 elseif WeHaveCV && ~WeHaveIPT
     
     GenerateError('NoIPT', language);
-    close(handles.KAACV);
+    close(handles.KAACVP);
     return;
 end
 
@@ -103,7 +105,7 @@ function OpenMenu_Callback(hObject, eventdata, handles)
 % - проводит проверки на глупое открытие .fig вместо .m 
 % - открывает файл картинку/видео. Если не смогла - информирует 
 % - сохраняет удачно открытый файл 
-%   в контейнер 'UserData'основного окна KAACV -
+%   в контейнер 'UserData'основного окна KAACVP -
 % - размещает картинку/первый кадр в ось FileAxes, создавая объект, для
 %   которого будем затем обновлять параметр 'CData' с помощью FrameSlider
 % - для видео - настраивает слайдер кадров и открывает кнопки воспроизведения,
@@ -130,7 +132,7 @@ warning('on','all');
 %%%%%%%%%%%%%%%%%%%%% после удачного открытия
 
 % записываю удачно открытый файл в данные фигуры
-setappdata(handles.KAACV,'UserFile',UserFile);
+setappdata(handles.KAACVP,'UserFile',UserFile);
 
 % открываем/блокируем все нужные элементы
 if UserFile.IsVideo == true
@@ -192,10 +194,10 @@ set([...
 
 
 % настравием ось под размеры видео/картинки
-SetNewAxesPosition(handles.FileAxes, UserFile.Heigth, UserFile.Width);
+SetNewAxesPosition(handles.FileAxes, UserFile.Height, UserFile.Width);
 
 % разблокируем кнопку зума, если изображение меньше размера оси
-if GetMaxImageToAxesSideRation(handles.FileAxes, UserFile.Heigth, UserFile.Width) < 1
+if GetMaxImageToAxesSideRation(handles.FileAxes, UserFile.Height, UserFile.Width) < 1
     
     handles.ZoomButton.Enable = 'on';
 else
@@ -228,7 +230,7 @@ CVMethodMenu_Callback(hObject, eventdata, handles);
 % "ПОКАЗАТЬ КАДР/ИЗОБРАЖЕНИЕ"
 function ShowFrameMenu_Callback(hObject, eventdata, handles)
 
-UserFile = getappdata(handles.KAACV,'UserFile');
+UserFile = getappdata(handles.KAACVP,'UserFile');
 Image = UserFile.Multimedia(handles.FrameSlider.Value).Frame;
 
 try
@@ -241,7 +243,7 @@ end
 % ПРОСМОТР ROI
 function ROIShowMenu_Callback(hObject, eventdata, handles)
 
-UserFile = getappdata(handles.KAACV,'UserFile');
+UserFile = getappdata(handles.KAACVP,'UserFile');
 
 % считываем координаты углов ROI
 ROI_X0 = round(str2double(handles.ROIx0.String));
@@ -264,7 +266,7 @@ end
 % "СОХРАНИТЬ КАДР"
 function SaveFrameMenu_Callback(hObject, eventdata, handles)
 
-UserFile = getappdata(handles.KAACV,'UserFile');
+UserFile = getappdata(handles.KAACVP,'UserFile');
 
 FrameNumber = handles.FrameSlider.Value;
 Image = UserFile.Multimedia(FrameNumber).Frame;
@@ -287,7 +289,7 @@ end
 handles.RussianLanguageMenu.Checked = 'on';
 handles.EnglishLanguageMenu.Checked = 'off';
 
-UserFile = getappdata(handles.KAACV,'UserFile');
+UserFile = getappdata(handles.KAACVP,'UserFile');
 
 IsRusLanguage = IsFigureLanguageRussian(handles);
 
@@ -333,7 +335,7 @@ end
 handles.EnglishLanguageMenu.Checked = 'on';
 handles.RussianLanguageMenu.Checked = 'off';
 
-UserFile = getappdata(handles.KAACV,'UserFile');
+UserFile = getappdata(handles.KAACVP,'UserFile');
 
 IsRusLanguage = IsFigureLanguageRussian(handles);
 
@@ -368,8 +370,8 @@ if ~isempty(UserFile)
 end
 
 
-%
-%
+%---------------------------------------------------------------------------------
+
 % ВЫБОР МЕТОДА ОБРАБОТКИ
 function CVMethodMenu_Callback(hObject, eventdata, handles)
 
@@ -391,7 +393,7 @@ handles.ShowPatternImageMenu.Visible = 'off';
 handles.PatternAxesPanel.Visible = 'off';
 
 % очищаем старые пользовательские данные
-setappdata(handles.KAACV,'Pattern',[]);
+setappdata(handles.KAACVP,'Pattern',[]);
 delete([handles.PatternAxes.Children handles.PatternAxes.UserData]);
 
 % устанавливаем все выбранные строки менюшек в 1,
@@ -404,12 +406,12 @@ handles.ParMenu4.Value = 1;
 handles.ParCheckBox1.Value = 0;
 handles.ParCheckBox2.Value = 0;
 
-UserFile = getappdata(handles.KAACV,'UserFile');
+UserFile = getappdata(handles.KAACVP,'UserFile');
 
-width = UserFile.Width;
-heigth = UserFile.Heigth; 
-MinWidthHeigth = min(width,heigth);     % минимальная сторона
-MaxWidthHeigth = max(width,heigth);     % максимальная сторона
+ImWidth = UserFile.Width;
+ImHeight = UserFile.Height; 
+MinWidthHeight = min(ImWidth,ImHeight);     % минимальная сторона
+MaxWidthHeight = max(ImWidth,ImHeight);     % максимальная сторона
 
 % тестовое изображение из середины для определения чб или нет
 % (для видео первый кадр бывает абсолютно черный)
@@ -446,12 +448,12 @@ switch ComputerVisionMethod
         
         handles.ROIx0.String = num2str(1);
         handles.ROIy0.String = num2str(1);
-        handles.ROIx1.String = num2str(width);
-        handles.ROIy1.String = num2str(heigth);        
+        handles.ROIx1.String = num2str(ImWidth);
+        handles.ROIy1.String = num2str(ImHeight);        
         handles.ROIx0.Value = 1;
         handles.ROIy0.Value = 1;
-        handles.ROIx1.Value = width;
-        handles.ROIy1.Value = heigth;
+        handles.ROIx1.Value = ImWidth;
+        handles.ROIy1.Value = ImHeight;
         
         % Порог распознавания
         handles.ParSlider1.Min              = 0.01;
@@ -566,16 +568,16 @@ switch ComputerVisionMethod
         
         % Максимальное количество пятен
         handles.ParSlider1.Min              = 1;
-        handles.ParSlider1.Max              = width * heigth;
-        handles.ParSlider1.SliderStep       = [1/(width*heigth-1) 10/(width*heigth-1)];
-        handles.ParSlider1.Value            = round(width * heigth / 2);
-        handles.ParSliderValueText1.String  = num2str(round(width * heigth / 2));         
+        handles.ParSlider1.Max              = ImWidth * ImHeight;
+        handles.ParSlider1.SliderStep       = [1/(ImWidth*ImHeight-1) 10/(ImWidth*ImHeight-1)];
+        handles.ParSlider1.Value            = round(ImWidth * ImHeight / 2);
+        handles.ParSliderValueText1.String  = num2str(round(ImWidth * ImHeight / 2));         
         
         % Минимальная область пятна
         handles.ParSlider2.Min              = 0;
-        handles.ParSlider2.Max              = width * heigth;
-        handles.ParSlider2.SliderStep       = [1/(width*heigth) 10/(width*heigth)];
-        if width*heigth <= 50            
+        handles.ParSlider2.Max              = ImWidth * ImHeight;
+        handles.ParSlider2.SliderStep       = [1/(ImWidth*ImHeight) 10/(ImWidth*ImHeight)];
+        if ImWidth*ImHeight <= 50            
             handles.ParSlider2.Value            = 0;
             handles.ParSliderValueText2.String  = '0';
         else            
@@ -585,10 +587,10 @@ switch ComputerVisionMethod
         
         % Максимальная область пятна
         handles.ParSlider3.Min              = 1;
-        handles.ParSlider3.Max              = width*heigth;
-        handles.ParSlider3.SliderStep       = [1/(width*heigth-1) 10/(width*heigth-1)];
-        handles.ParSlider3.Value            = round(width * heigth / 2);
-        handles.ParSliderValueText3.String  = num2str(round(width * heigth / 2)); 
+        handles.ParSlider3.Max              = ImWidth*ImHeight;
+        handles.ParSlider3.SliderStep       = [1/(ImWidth*ImHeight-1) 10/(ImWidth*ImHeight-1)];
+        handles.ParSlider3.Value            = round(ImWidth * ImHeight / 2);
+        handles.ParSliderValueText3.String  = num2str(round(ImWidth * ImHeight / 2)); 
         
         
         % Чувствительность
@@ -637,6 +639,114 @@ switch ComputerVisionMethod
                 
         
     case {'Распознавание лиц','Face detection'}
+        
+        handles.ParMenu1.Visible = 'on';
+        handles.ParMenuText1.Visible = 'on';
+        
+        set([...
+            handles.ROIx0;...
+            handles.ROIy0;...
+            handles.ROIx1;...
+            handles.ROIy1;...
+            handles.ROIButton;...
+            handles.ROIText;...
+            ],'Visible','on');
+        
+        handles.ROIx0.String = num2str(1);
+        handles.ROIy0.String = num2str(1);
+        handles.ROIx1.String = num2str(ImWidth);
+        handles.ROIy1.String = num2str(ImHeight);        
+        handles.ROIx0.Value = 1;
+        handles.ROIy0.Value = 1;
+        handles.ROIx1.Value = ImWidth;
+        handles.ROIy1.Value = ImHeight;
+        
+        handles.ParSlider1.Visible = 'on';
+        handles.ParSliderText1.Visible = 'on';
+        handles.ParSliderValueText1.Visible = 'on';
+        
+        handles.ParSlider2.Visible = 'on';
+        handles.ParSliderText2.Visible = 'on';
+        handles.ParSliderValueText2.Visible = 'on';
+        
+        handles.ParSlider3.Visible = 'on';
+        handles.ParSliderText3.Visible = 'on';
+        handles.ParSliderValueText3.Visible = 'on';
+        
+        handles.ParSlider4.Visible = 'on';
+        handles.ParSliderText4.Visible = 'on';
+        handles.ParSliderValueText4.Visible = 'on';
+        
+        handles.ParSlider5.Visible = 'on';
+        handles.ParSliderText5.Visible = 'on';
+        handles.ParSliderValueText5.Visible = 'on';
+        
+        handles.ParSlider6.Visible = 'on';
+        handles.ParSliderText6.Visible = 'on';
+        handles.ParSliderValueText6.Visible = 'on';
+        
+        if IsRusLanguage
+            
+            handles.ParMenuText1.String = 'Модель классификации';
+            handles.ParMenu1.String = { 'Анфас (CART)';...
+                                        'Анфас (LBP)';...
+                                        'Верх тела';...
+                                        'Пара глаз';...
+                                        'Один глаз';...
+                                        'Один глаз (CART)';...
+                                        'Профиль';...
+                                        'Рот';...
+                                        'Нос';...
+                                        };                                    
+                                    
+            handles.ParSliderText1.String = 'Минимальная высота объекта: '; 
+            handles.ParSliderText2.String = 'Максимальная высота объекта: '; 
+            handles.ParSliderText3.String = 'Минимальная ширина объекта: '; 
+            handles.ParSliderText4.String = 'Максимальная ширина объекта: '; 
+            handles.ParSliderText5.String = 'Шаг масштабирования: '; 
+            handles.ParSliderText6.String = 'Порог слияния: '; 
+            
+        else            
+            handles.ParMenuText1.String = 'Classification model';
+            handles.ParMenu1.String = { 'Frontal Face (CART)';...
+                                        'Frontal Face (LBP)';...
+                                        'Upper Body';...
+                                        'Eye Pair';...
+                                        'Single Eye';...
+                                        'Single Eye (CART)';...
+                                        'Profile Face';...
+                                        'Mouth';...
+                                        'Nose';...
+                                        };
+                                    
+            handles.ParSliderText1.String = 'Minimal object height: '; 
+            handles.ParSliderText2.String = 'Maximum object height: '; 
+            handles.ParSliderText3.String = 'Minimal object width: '; 
+            handles.ParSliderText4.String = 'Maximum object width: '; 
+            handles.ParSliderText5.String = 'Scale factor: ';
+            handles.ParSliderText6.String = 'Merge Threshold: '; 
+            
+        end     
+        
+        % Шаг масштабирования
+        handles.ParSlider5.Min              = 1.0001;
+        handles.ParSlider5.Max              = 5;
+        handles.ParSlider5.SliderStep       = [0.0001/3.9999 0.01/3.9999];
+        handles.ParSlider5.Value            = 1.1;
+        handles.ParSliderValueText5.String  = '1.1';
+        
+        % Порог слияния
+        handles.ParSlider6.Min              = 1;
+        handles.ParSlider6.Max              = 1000;
+        handles.ParSlider6.SliderStep       = [1/999 10/999];
+        handles.ParSlider6.Value            = 4;
+        handles.ParSliderValueText6.String  = '4'; 
+            
+        % обновляем интерфейс
+        ROIButton_Callback(hObject, eventdata, handles);
+        
+        % при вызове меню будут настроены слайдеры 1-4
+        ParMenu1_Callback(hObject, eventdata, handles);
         
     case {'Распознавание людей','People detection'}
         
@@ -689,12 +799,12 @@ switch ComputerVisionMethod
         
         handles.ROIx0.String = num2str(1);
         handles.ROIy0.String = num2str(1);
-        handles.ROIx1.String = num2str(width);
-        handles.ROIy1.String = num2str(heigth);        
+        handles.ROIx1.String = num2str(ImWidth);
+        handles.ROIy1.String = num2str(ImHeight);        
         handles.ROIx0.Value = 1;
         handles.ROIy0.Value = 1;
-        handles.ROIx1.Value = width;
-        handles.ROIy1.Value = heigth;         
+        handles.ROIx1.Value = ImWidth;
+        handles.ROIy1.Value = ImHeight;         
         
         % Порог сравнения
         handles.ParSlider5.Min              = 1;
@@ -726,8 +836,8 @@ switch ComputerVisionMethod
         
         % Макс. расстояние между точкой и проекцией
         handles.ParSlider9.Min              = 1;
-        handles.ParSlider9.Max              = MinWidthHeigth/4;
-        handles.ParSlider9.SliderStep       = [1/(MinWidthHeigth/4 - 1) 10/(MinWidthHeigth/4 - 1)];
+        handles.ParSlider9.Max              = MinWidthHeight/4;
+        handles.ParSlider9.SliderStep       = [1/(MinWidthHeight/4 - 1) 10/(MinWidthHeight/4 - 1)];
         handles.ParSlider9.Value            = 2;
         handles.ParSliderValueText9.String  = '2';          
         
@@ -799,7 +909,7 @@ switch ComputerVisionMethod
             handles.ParCheckBox2.TooltipString = 'Match results are only unique keypoints';
             handles.ParSlider9.TooltipString = 'Maximum distance from point to projection';
                        
-        end
+        end         % IsRusLanguage
         
         % обновляем интерфейс
         ParMenu3_Callback(hObject, eventdata, handles);
@@ -820,9 +930,7 @@ switch ComputerVisionMethod
         
 end
 
-%
-%
-%
+%---------------------------------------------------------------------------------
 
 % ВЫБОР ОТОБРАЖАЕМОГО КАДРА/ИЗОБРАЖЕНИЯ ИЗ ЭТАПОВ ОБРАБОТКИ
 function VideoMenu_Callback(~, ~, handles)
@@ -837,6 +945,72 @@ ShowMultimediaFile(handles);
 
 % МЕНЮ № 1 ПАРАМЕТРОВ 
 function ParMenu1_Callback(hObject, eventdata, handles)
+        
+UserFile = getappdata(handles.KAACVP,'UserFile');
+
+ImWidth = UserFile.Width;
+ImHeight = UserFile.Height;
+
+ComputerVisionMethod = string(handles.CVMethodMenu.String( handles.CVMethodMenu.Value ));
+
+switch ComputerVisionMethod
+    
+    case {'Распознавание лиц','Face detection'}        
+        
+        handles.ParSlider1.Enable = 'on';
+        handles.ParSlider2.Enable = 'on';
+        handles.ParSlider3.Enable = 'on';
+        handles.ParSlider4.Enable = 'on';
+        
+        % Считываем размер изображений, на которых обучен каскад
+        % Этот размер будем минимумом для определения
+        TrainModelSize = ReturnFaceDetectorTrainModelSize(...
+                string( handles.ParMenu1.String( handles.ParMenu1.Value ) ));
+        
+        %-----------------------------------------------------------
+        % следующие слайдеры устанавливают пределы интервалов: от min к max
+        % чтобы исключить пересечения значений парных слайдеров (чтобы не было max < min)
+        % их 'Value' должны быть равны соответствующим пределам в самом начале
+        % в откликах парных интервальных слайдеров их пределы меняются при их вызове
+                
+        % Минимальная высота объекта
+        handles.ParSlider1.Min              = TrainModelSize(1);            % предел равен
+        handles.ParSlider1.Max              = ImHeight - 1;
+        handles.ParSlider1.SliderStep       = [ 1 /(ImHeight-1-TrainModelSize(1))...
+                                                10/(ImHeight-1-TrainModelSize(1))];
+        handles.ParSlider1.Value            = TrainModelSize(1);            % значению
+        handles.ParSliderValueText1.String  = num2str(TrainModelSize(1));   
+        
+        % Максимальная высота объекта
+        handles.ParSlider2.Min              = TrainModelSize(1) + 1;
+        handles.ParSlider2.Max              = ImHeight;                     % предел равен
+        handles.ParSlider2.SliderStep       = [ 1 /(ImHeight-TrainModelSize(1)-1)...
+                                                10/(ImHeight-TrainModelSize(1)-1)];
+        handles.ParSlider2.Value            = ImHeight;                     % значению
+        handles.ParSliderValueText2.String  = num2str(ImHeight);            
+        
+        % Минимальная ширина объекта
+        handles.ParSlider3.Min              = TrainModelSize(2);            % предел равен
+        handles.ParSlider3.Max              = ImWidth - 1;
+        handles.ParSlider3.SliderStep       = [ 1 /(ImWidth-1-TrainModelSize(2))...
+                                                10/(ImWidth-1-TrainModelSize(2))];
+        handles.ParSlider3.Value            = TrainModelSize(2);            % значению
+        handles.ParSliderValueText3.String  = num2str(TrainModelSize(2));   
+        
+        % Максимальная ширина объекта        
+        handles.ParSlider4.Min              = TrainModelSize(2) + 1;        
+        handles.ParSlider4.Max              = ImWidth;                      % предел равен
+        handles.ParSlider4.SliderStep       = [ 1 /(ImWidth-TrainModelSize(2)-1) ...
+                                                10/(ImWidth-TrainModelSize(2)-1)];
+        handles.ParSlider4.Value            = ImWidth;                      % значению
+        handles.ParSliderValueText4.String  = num2str(ImWidth);
+        
+        %-----------------------------------------------------------
+        
+    otherwise
+        assert(0,'в ParMethod2 вызвана несуществующая строка из меню обработок');
+        
+end    
 
 
 % МЕНЮ № 2 ПАРАМЕТРОВ 
@@ -881,7 +1055,14 @@ switch ComputerVisionMethod
                 handles.ParMenu3.Visible = 'off';
                 handles.ParMenuText3.Visible = 'off';
                 
-        end     % switch ParMenu2Method    
+            otherwise
+                assert(0,'в ParMethod2 вызвана несуществующая строка из меню методов');
+        
+        end     % switch ParMenu2Method 
+        
+    otherwise
+        assert(0,'в ParMethod2 вызвана несуществующая строка из меню обработок');
+        
 end             % switch ComputerVisionMethod
 
 
@@ -893,17 +1074,17 @@ function ParMenu3_Callback(hObject, eventdata, handles)
 
 IsRusLanguage = IsFigureLanguageRussian(handles);
 
-UserFile = getappdata(handles.KAACV,'UserFile');
+UserFile = getappdata(handles.KAACVP,'UserFile');
 
-MaxOfWidthAndHeigth = max(UserFile.Width, UserFile.Heigth);
-MinOfWidthAndHeigth = min(UserFile.Width, UserFile.Heigth);
+MaxOfWidthAndHeight = max(UserFile.Width, UserFile.Height);
+MinOfWidthAndHeight = min(UserFile.Width, UserFile.Height);
 
 ComputerVisionMethod = string(handles.CVMethodMenu.String(handles.CVMethodMenu.Value));
 ParMenu3Method = string(handles.ParMenu3.String( handles.ParMenu3.Value ));
 
 switch ComputerVisionMethod
     case {'Распознавание объектов','Object detection'}    
-        
+                
         % прячу все, открываю затем только нужные        
         handles.ParSlider1.Visible = 'off';
         handles.ParSliderText1.Visible = 'off';
@@ -915,13 +1096,18 @@ switch ComputerVisionMethod
         
         handles.ParSlider3.Visible = 'off';
         handles.ParSliderText3.Visible = 'off';
-        handles.ParSliderValueText3.Visible = 'off';
+        handles.ParSliderValueText3.Visible = 'off';        
         
         handles.ParSlider4.Visible = 'off';
         handles.ParSliderText4.Visible = 'off';
         handles.ParSliderValueText4.Visible = 'off';        
         
-        handles.ParCheckBox1.Visible = 'off';        
+        handles.ParCheckBox1.Visible = 'off';
+        
+        handles.ParSlider1.Enable = 'on';
+        handles.ParSlider2.Enable = 'on';
+        handles.ParSlider3.Enable = 'on';
+        handles.ParSlider4.Enable = 'on';        
         
         % установка в дефолт
         handles.ParMenuText4.Value = 1;
@@ -961,25 +1147,28 @@ switch ComputerVisionMethod
                 handles.ParSlider2.Value            = 2;
                 handles.ParSliderValueText2.String  = '2';
                 
-                % слайдеры будут менять свои пределы 
-                % в зависимости от выбора пользователя,
-                % чтобы исключить выход максимальной области за значенее
-                % меньшее, чем выбор минимальной области и наоборот
-                % поэтому Value должны быть равны пределам!!!
-                handles.ParSlider3.Min              = 1;
-                handles.ParSlider3.Max              = MaxOfWidthAndHeigth - 1;
-                handles.ParSlider3.SliderStep       = [ 1/(MaxOfWidthAndHeigth - 1)...
-                                                        1/(MaxOfWidthAndHeigth - 1)];
-                handles.ParSlider3.Value            = 1;
-                handles.ParSliderValueText3.String  = '1';
+                %-----------------------------------------------------------
+                % следующие слайдеры устанавливают пределы интервалов: от min к max
+                % чтобы исключить пересечения значений слайдеров (чтобы не было max < min)
+                % их 'Value' должны быть равны соответствующим пределам в самом начале
+                % в откликах парных интервальных слайдеров их пределы постоянно меняются
+                
+                handles.ParSlider3.Min              = 1;        % предел равен
+                handles.ParSlider3.Max              = MaxOfWidthAndHeight - 1;  
+                handles.ParSlider3.SliderStep       = [ 1/(MaxOfWidthAndHeight - 1)...
+                                                        1/(MaxOfWidthAndHeight - 1)];
+                handles.ParSlider3.Value            = 1;        % значению
+                handles.ParSliderValueText3.String  = '1';      
                 
                 handles.ParSlider4.Min              = 2;
-                handles.ParSlider4.Max              = MaxOfWidthAndHeigth;
-                handles.ParSlider4.SliderStep       = [ 1/(MaxOfWidthAndHeigth - 1) ...
-                                                        1/(MaxOfWidthAndHeigth - 1)];
-                handles.ParSlider4.Value            = MaxOfWidthAndHeigth;
-                handles.ParSliderValueText4.String  = num2str(MaxOfWidthAndHeigth);
+                handles.ParSlider4.Max              = MaxOfWidthAndHeight;          % предел равен
+                handles.ParSlider4.SliderStep       = [ 1/(MaxOfWidthAndHeight - 1) ...
+                                                        1/(MaxOfWidthAndHeight - 1)];
+                handles.ParSlider4.Value            = MaxOfWidthAndHeight;          % значению
+                handles.ParSliderValueText4.String  = num2str(MaxOfWidthAndHeight); 
                 
+                %-----------------------------------------------------------
+                        
                 if IsRusLanguage 
                     
                     handles.ParSliderText1.String = 'Максимальная вариация области:';
@@ -1112,8 +1301,8 @@ switch ComputerVisionMethod
                 handles.ParSliderValueText2.Visible = 'on';                
                                 
                 handles.ParSlider3.Min              = 3;
-                handles.ParSlider3.Max              = MinOfWidthAndHeigth;
-                handles.ParSlider3.SliderStep       = [2/(MinOfWidthAndHeigth-3) 2/(MinOfWidthAndHeigth-3)];
+                handles.ParSlider3.Max              = MinOfWidthAndHeight;
+                handles.ParSlider3.SliderStep       = [2/(MinOfWidthAndHeight-3) 2/(MinOfWidthAndHeight-3)];
                 handles.ParSlider3.Value            = 3;
                 handles.ParSliderValueText3.String  = '3';
                 
@@ -1152,8 +1341,8 @@ switch ComputerVisionMethod
                 handles.ParSliderValueText2.Visible = 'on';                
                 
                 handles.ParSlider3.Min              = 3;
-                handles.ParSlider3.Max              = MaxOfWidthAndHeigth;
-                handles.ParSlider3.SliderStep       = [2/(MaxOfWidthAndHeigth-3) 2/(MaxOfWidthAndHeigth-3)];
+                handles.ParSlider3.Max              = MaxOfWidthAndHeight;
+                handles.ParSlider3.SliderStep       = [2/(MaxOfWidthAndHeight-3) 2/(MaxOfWidthAndHeight-3)];
                 handles.ParSlider3.Value            = 3;
                 handles.ParSliderValueText3.String  = '3';
                 
@@ -1240,7 +1429,14 @@ switch ComputerVisionMethod
                     
                 end
                 
+            otherwise
+                assert(0,'в ParMethod3 вызвана несуществующая строка из меню методов');
+                
         end             % switch ParMenu3Method
+        
+    otherwise
+        assert(0,'в ParMethod3 вызвана несуществующая строка из меню обработок');
+        
 end                     % switch ComputerVisionMethod
 
 
@@ -1290,7 +1486,7 @@ else
     handles.FrameSlider.Enable = 'off';
     handles.PatternOpenButton.Enable = 'off';
     
-    UserFile = getappdata(handles.KAACV,'UserFile'); 
+    UserFile = getappdata(handles.KAACVP,'UserFile'); 
     FrameRate = UserFile.FrameRate;
     
     % прогоняем кадры
@@ -1358,8 +1554,8 @@ handles.FrameSlider.Value = FrameNumber;
 FrameSlider_Callback(hObject, eventdata, handles);
 
 
-%
-%
+%---------------------------------------------------------------------------------
+
 % ПРИМЕНИТЬ
 function ApplyButton_Callback(hObject, eventdata, handles)
 
@@ -1376,7 +1572,7 @@ function ApplyButton_Callback(hObject, eventdata, handles)
 % - сохраняем поля структуры в главном окне
 % - вызываем обработчики событий элементов интерфейса для обновления интерфейса
 
-UserFile = getappdata(handles.KAACV,'UserFile');
+UserFile = getappdata(handles.KAACVP,'UserFile');
 
 Image = UserFile.Multimedia(handles.FrameSlider.Value).Frame;
 
@@ -1496,7 +1692,7 @@ switch ProcessParameters.ComputerVisionMethod
         
     case {'Распознавание объектов','Object detection'}
         
-        ProcessParameters.Pattern = getappdata(handles.KAACV,'Pattern');
+        ProcessParameters.Pattern = getappdata(handles.KAACVP,'Pattern');
                
         ProcessParameters.Slider1Value =    handles.ParSlider1.Value;
         ProcessParameters.Slider2Value =    handles.ParSlider2.Value;
@@ -1561,9 +1757,9 @@ end
 ProcessResults = ComputerVisionProcessing(Image, ProcessParameters, IsRusLanguage);  
 
 % сохраняем и используем полученные данные                        
-setappdata(handles.KAACV,'LABEL',ProcessResults.LABEL);
-setappdata(handles.KAACV,'Boxes',ProcessResults.Boxes);
-setappdata(handles.KAACV,'ImagesToShow',ProcessResults.ImagesToShow.Images);  
+setappdata(handles.KAACVP,'LABEL',ProcessResults.LABEL);
+setappdata(handles.KAACVP,'Boxes',ProcessResults.Boxes);
+setappdata(handles.KAACVP,'ImagesToShow',ProcessResults.ImagesToShow.Images);  
 
 % если образец не пустой он появится о осях
 image(ProcessResults.NewPattern,'Parent',handles.PatternAxes);
@@ -1590,12 +1786,13 @@ end
 StatisticsList_Callback(hObject, eventdata, handles);   
 VideoMenu_Callback(hObject, eventdata, handles);
 
+%---------------------------------------------------------------------------------
 
 % УВЕЛИЧЕНИЕ РАЗМЕРА ИЗОБРАЖЕНИЙ/ВИДЕО ПОД РАЗМЕР ОСИ
 function ZoomButton_Callback(~, ~, handles)
 
-UserFile = getappdata(handles.KAACV,'UserFile');
-Pattern = getappdata(handles.KAACV,'Pattern');
+UserFile = getappdata(handles.KAACVP,'UserFile');
+Pattern = getappdata(handles.KAACVP,'Pattern');
 
 % если надо уменьшить    
 if handles.ZoomButton.Value == 0    
@@ -1608,7 +1805,7 @@ if handles.ZoomButton.Value == 0
     end
     
     % запускаем изменение размеров оси
-    SetNewAxesPosition(handles.FileAxes, UserFile.Heigth, UserFile.Width);
+    SetNewAxesPosition(handles.FileAxes, UserFile.Height, UserFile.Width);
     
     if ~isempty(Pattern)    % если есть изображените - образец
         
@@ -1629,11 +1826,11 @@ else        % увеличить надо оси размер
     FileAxesPosition = getappdata(handles.FileAxes,'InitPosition');
     
     % считаем величину масштабирования
-    MinImageToAxesSideRation = min( UserFile.Heigth/FileAxesPosition(4),...
+    MinImageToAxesSideRation = min( UserFile.Height/FileAxesPosition(4),...
                                     UserFile.Width/FileAxesPosition(3));
     
     % считаем новые размеры оси
-    NewHeight = UserFile.Heigth / MinImageToAxesSideRation;  
+    NewHeight = UserFile.Height / MinImageToAxesSideRation;  
     NewWidth =  UserFile.Width  / MinImageToAxesSideRation;
     
     % запускаем изменение размеров оси
@@ -1666,7 +1863,7 @@ function ROIButton_Callback(hObject, ~, handles)
 % удаляем старую рамку ROI в оси: она всегда пунктирная
 delete(findobj('Parent',handles.FileAxes,'LineStyle','--'));
 
-UserFile = getappdata(handles.KAACV,'UserFile');
+UserFile = getappdata(handles.KAACVP,'UserFile');
 
 ComputerVisionMethod = string(handles.CVMethodMenu.String(handles.CVMethodMenu.Value));
 
@@ -1686,7 +1883,7 @@ if hObject == handles.ROIButton
                         ROIPosition(2) + ROIPosition(4)];
     
     % ограничиваем координаты ROI при выходе за пределы размеров изображения    
-    Limits = [1 1 UserFile.Width UserFile.Heigth];
+    Limits = [1 1 UserFile.Width UserFile.Height];
     AreTopLimits = [false false true true];
     X0Y0X1Y1Coords = LimitCheck(X0Y0X1Y1Coords, Limits, AreTopLimits);    
     
@@ -1717,7 +1914,7 @@ if hObject == handles.ROIButton
             image(Pattern,'Parent',handles.PatternAxes);
             handles.PatternAxes.Visible = 'off';            
             
-            setappdata(handles.KAACV,'Pattern',Pattern);      
+            setappdata(handles.KAACVP,'Pattern',Pattern);      
             
             % размер оси будет установлен в соответствие со статусом кнопки
             ZoomButton_Callback(0, 0, handles);
@@ -1773,7 +1970,7 @@ else    % поменяли координату в текстовых полях
             image(Pattern,'Parent',handles.PatternAxes);
             handles.PatternAxes.Visible = 'off';
             
-            setappdata(handles.KAACV,'Pattern',Pattern);
+            setappdata(handles.KAACVP,'Pattern',Pattern);
             ZoomButton_Callback(0, 0, handles);
             
             handles.ShowPatternImageMenu.Visible = 'on';
@@ -1811,7 +2008,7 @@ switch ComputerVisionMethod
         handles.PatternAxes.Visible = 'off';
         
         % сохраняем ее
-        setappdata(handles.KAACV, 'Pattern',Pattern); 
+        setappdata(handles.KAACVP, 'Pattern',Pattern); 
         
         % в зависимоти от статуса кнопки зума изменится размер оси
         ZoomButton_Callback(0, 0, handles);
@@ -1838,7 +2035,7 @@ function FrameSlider_Callback(hObject, eventdata, handles)
 % СЛАЙДЕР ФОРМИРУЕТ СТРУКТУРУ ОТОБРАЖАЕМЫХ ИЗОБРАЖЕНИЙ 
 % И ЗАПУСКАЕТ ОТОБРАЖЕНИЕ, ОБНОВЛЯЕТ СЧЕТЧИК КАДРОВ И ВРЕМЕНИ
 
-UserFile = getappdata(handles.KAACV,'UserFile');
+UserFile = getappdata(handles.KAACVP,'UserFile');
 
 FrameNumber = round(handles.FrameSlider.Value); % считываем номер кадра
 handles.FrameSlider.Value = FrameNumber;        % запоминаем уточненное значение в слайдере
@@ -1853,7 +2050,7 @@ else    % без обработки
     ImagesToShow(1).Images = UserFile.Multimedia(FrameNumber).Frame;
     
     % и сохраняем структуру
-    setappdata(handles.KAACV,'ImagesToShow',ImagesToShow);
+    setappdata(handles.KAACVP,'ImagesToShow',ImagesToShow);
     
     % удаляем старые граф объекты из осей
     delete(findobj('Parent',handles.FileAxes,'LineStyle','-.','EdgeColor','b'));
@@ -1893,6 +2090,34 @@ switch ComputerVisionMethod
     case {'Распознавание объектов','Object detection'}    
         ParSlider1Value = round(ParSlider1Value*100)/100;
         
+    case {'Распознавание лиц','Face detection'}
+        
+        % регулируем пределы слайдероов, чтобы пользователь
+        % не смог установить максимальную область меньше минимальной
+        
+        ParSlider1Value = round(ParSlider1Value);
+        handles.ParSlider1.Value = ParSlider1Value;
+        
+        % если слайдеры уперлись друг в друга
+        % заблокируем тот, у которого предел достигнут
+        % иначе просто изменим предел другого слайдера
+        
+        if  handles.ParSlider2.Max == ParSlider1Value + 1
+            
+            handles.ParSlider2.Enable = 'off';
+            handles.ParSliderValueText2.Enable = 'off';
+            handles.ParSliderValueText2.String = num2str(ParSlider1Value+1);
+        else
+            handles.ParSlider2.Enable = 'on';
+            handles.ParSliderValueText2.Enable = 'on';
+            
+            handles.ParSlider2.Min = ParSlider1Value + 1;
+            handles.ParSlider2.SliderStep = ...
+                [1/(handles.ParSlider2.Max-ParSlider1Value-1) ...
+                10/(handles.ParSlider2.Max-ParSlider1Value-1)];
+        end
+        
+        
     otherwise
         assert(0,'в ParSlider1 вызвана несуществующая строка из меню методов');
         
@@ -1918,6 +2143,7 @@ switch ComputerVisionMethod
         
     case {'Распознавание объектов','Object detection'}    
         
+        
         switch ParMenu3Method  % тип детектора
             
             case {'MSER'}             
@@ -1934,10 +2160,37 @@ switch ComputerVisionMethod
                     'SURF (128 descriptor size)'}
                 
                 ParSlider2Value = round(ParSlider2Value/100)*100;
-                
+                    
             otherwise
                 assert(0,'в ParSlider2 вызвана несуществующая строка из меню детекторов');       
         end                
+    
+        
+    case {'Распознавание лиц','Face detection'}
+        
+        % регулируем пределы слайдероов, чтобы пользователь
+        % не смог установить максимальную область меньше минимальной
+        
+        ParSlider2Value = round(ParSlider2Value);
+        handles.ParSlider2.Value = ParSlider2Value;
+        
+        % если слайдеры уперлись друг в друга
+        % заблокируем тот, у которого предел достигнут
+        % иначе просто изменим предел другого слайдера
+        
+        if  handles.ParSlider1.Min == ParSlider2Value - 1
+            handles.ParSlider1.Enable = 'off';
+            handles.ParSliderValueText1.Enable = 'off';
+            handles.ParSliderValueText1.String = num2str(ParSlider2Value-1);
+        else
+            handles.ParSlider1.Enable = 'on';
+            handles.ParSliderValueText1.Enable = 'on';
+            handles.ParSlider1.Max = ParSlider2Value - 1;
+            handles.ParSlider1.SliderStep = ...
+                [1/(ParSlider2Value - handles.ParSlider1.Min-1) ...
+                10/(ParSlider2Value - handles.ParSlider1.Min-1)];
+        end
+        
         
     otherwise
         assert(0,'в ParSlider2 вызвана несуществующая строка из меню методов');        
@@ -1966,13 +2219,18 @@ switch ComputerVisionMethod
             
             case {'MSER'}    
                 
-                % регулируем пределы слайдероов, 
-                % чтобы пользователь не смогу установить максимальную область 
-                % выше меньше минимальной
+                % регулируем пределы слайдероов, чтобы пользователь
+                % не смог установить максимальную область меньше минимальной
+                
                 ParSlider3Value = round(ParSlider3Value);                          
                 handles.ParSlider3.Value = ParSlider3Value;
                 
+                % если слайдеры уперлись друг в друга
+                % заблокируем тот, у которого предел достигнут
+                % иначе просто изменим предел другого слайдера
+                
                 if  handles.ParSlider4.Max == ParSlider3Value + 1
+                    
                     handles.ParSlider4.Enable = 'off';
                     handles.ParSliderValueText4.Enable = 'off';
                     handles.ParSliderValueText4.String = num2str(ParSlider3Value+1);                    
@@ -2005,6 +2263,34 @@ switch ComputerVisionMethod
                 assert(0,'в ParSlider3 вызвана несуществующая строка из меню детекторов');
                 
         end     % switch ParMenu3Method
+           
+                
+    case {'Распознавание лиц','Face detection'}
+        
+        % регулируем пределы слайдероов, чтобы пользователь
+        % не смог установить максимальную область меньше минимальной
+        
+        ParSlider3Value = round(ParSlider3Value);
+        handles.ParSlider3.Value = ParSlider3Value;
+        
+        % если слайдеры уперлись друг в друга
+        % заблокируем тот, у которого предел достигнут
+        % иначе просто изменим предел другого слайдера
+        
+        if  handles.ParSlider4.Max == ParSlider3Value + 1
+            
+            handles.ParSlider4.Enable = 'off';
+            handles.ParSliderValueText4.Enable = 'off';
+            handles.ParSliderValueText4.String = num2str(ParSlider3Value+1);
+        else
+            handles.ParSlider4.Enable = 'on';
+            handles.ParSliderValueText4.Enable = 'on';
+            
+            handles.ParSlider4.Min = ParSlider3Value + 1;
+            handles.ParSlider4.SliderStep = ...
+                [1/(handles.ParSlider4.Max-ParSlider3Value-1) ...
+                10/(handles.ParSlider4.Max-ParSlider3Value-1)];
+        end
         
     otherwise
         assert(0,'в ParSlider3 вызвана несуществующая строка из меню методов');
@@ -2030,15 +2316,19 @@ switch ComputerVisionMethod
         
     case {'Распознавание объектов','Object detection'}
         
-        switch ParMenu3Method   % тип детектора
-            
-            % регулируем пределы слайдероов, 
-            % чтобы пользователь не смогу установить максимальную область 
-            % выше меньше минимальной
+        switch ParMenu3Method   % тип детектора            
+                
             case {'MSER'}
+                
+                % регулируем пределы слайдероов, чтобы пользователь
+                % не смог установить максимальную область меньше минимальной
                 
                 ParSlider4Value = round(ParSlider4Value);                                
                 handles.ParSlider4.Value = ParSlider4Value;
+                
+                % если слайдеры уперлись друг в друга
+                % заблокируем тот, у которого предел достигнут
+                % иначе просто изменим предел другого слайдера
                 
                 if  handles.ParSlider3.Min == ParSlider4Value - 1
                     handles.ParSlider3.Enable = 'off';
@@ -2063,7 +2353,33 @@ switch ComputerVisionMethod
              otherwise
                  assert(0,'в ParSlider4 вызвана несуществующая строка из меню методов');
                  
-        end             
+        end            
+        
+                
+    case {'Распознавание лиц','Face detection'}
+       
+        % регулируем пределы слайдероов, чтобы пользователь
+        % не смог установить максимальную область меньше минимальной
+        
+        ParSlider4Value = round(ParSlider4Value);
+        handles.ParSlider4.Value = ParSlider4Value;
+        
+        % если слайдеры уперлись друг в друга
+        % заблокируем тот, у которого предел достигнут
+        % иначе просто изменим предел другого слайдера
+        
+        if  handles.ParSlider3.Min == ParSlider4Value - 1
+            handles.ParSlider3.Enable = 'off';
+            handles.ParSliderValueText3.Enable = 'off';
+            handles.ParSliderValueText3.String = num2str(ParSlider4Value-1);
+        else
+            handles.ParSlider3.Enable = 'on';
+            handles.ParSliderValueText3.Enable = 'on';
+            handles.ParSlider3.Max = ParSlider4Value - 1;
+            handles.ParSlider3.SliderStep = ...
+                [1/(ParSlider4Value - handles.ParSlider3.Min-1) ...
+                10/(ParSlider4Value - handles.ParSlider3.Min-1)];
+        end
         
     otherwise
         assert(0,'в ParSlider4 вызвана несуществующая строка из меню методов');
@@ -2086,6 +2402,9 @@ switch ComputerVisionMethod
     case {'Распознавание объектов','Object detection'}
         ParSlider5Value = round(ParSlider5Value);
         
+    case {'Распознавание лиц','Face detection'}
+        ParSlider5Value = round(ParSlider5Value*10000)/10000;
+        
     otherwise
         assert(0,'в ParSlider5 вызвана несуществующая строка из меню методов');
         
@@ -2106,6 +2425,9 @@ switch ComputerVisionMethod
            
     case {'Распознавание объектов','Object detection'}
         ParSlider6Value = round(ParSlider6Value*100)/100;
+        
+    case {'Распознавание лиц','Face detection'}
+        ParSlider6Value = round(ParSlider6Value);
         
     otherwise
         assert(0,'в ParSlider6 вызвана несуществующая строка из меню методов');
@@ -2198,7 +2520,7 @@ switch ComputerVisionMethod
     case {'Распознавание текста','Optical character recognition'}        
         
         % считываем координаты областей найденного тектса
-        FoundTextBoxesCoords = getappdata(handles.KAACV,'Boxes');
+        FoundTextBoxesCoords = getappdata(handles.KAACVP,'Boxes');
         if isempty(FoundTextBoxesCoords)
             return;
         end
@@ -2218,7 +2540,7 @@ switch ComputerVisionMethod
     case {'Анализ пятен','Blob analysis'}
         
         % считываем разметку пятен
-        LABEL = getappdata(handles.KAACV,'LABEL');
+        LABEL = getappdata(handles.KAACVP,'LABEL');
         if isempty(LABEL)
             return;
         end
@@ -2246,7 +2568,7 @@ end
 % ОТКЛИКИ ПОЛЕЙ ОБЛАСТИ ИНТЕРЕСА
 function ROIedit_Callback(hObject, eventdata, handles)
 
-UserFile = getappdata(handles.KAACV,'UserFile');
+UserFile = getappdata(handles.KAACVP,'UserFile');
 
 IsRusLanguage = strcmp(handles.RussianLanguageMenu.Checked,'on');
 
@@ -2273,7 +2595,7 @@ switch hObject
         MinValue = 1;
         
     case handles.ROIy1
-        MaxValue = UserFile.Heigth;
+        MaxValue = UserFile.Height;
         MinValue = str2double(handles.ROIy0.String);
         
     case handles.ROIx0
@@ -2357,6 +2679,9 @@ end
 % обновляем поле и слайдер
 set(hObject,'String',num2str(ParEditValue));            
 set(eval(['handles.' SliderTag]),'Value',ParEditValue);
+
+% обновляем интерфейс слайдера
+eval([SliderTag '_Callback(hObject, eventdata, handles)']);
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%% ЧЕК-БОКСЫ %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -2619,7 +2944,7 @@ try         % пробуем открыть как видеофайл
                         'FrameRate',[],...
                         'IsVideo',[],...
                         'Width',[],...
-                        'Heigth',[],...
+                        'Height',[],...
                         'NumOfChannels',[]); 
     
     % задаем размер кадра            
@@ -2661,7 +2986,7 @@ catch       % не смогли открыть видеофайл
         UserFile = struct(  'Multimedia',[],...
                             'IsVideo',[],...
                             'Width',[],...
-                            'Heigth',[],...
+                            'Height',[],...
                             'NumOfChannels',[]); 
                     
         if size(Temp,3) > 3     % если многоканальное изображение
@@ -2681,7 +3006,7 @@ catch       % не смогли открыть видеофайл
 end
 
 % запоминаем свойства
-UserFile.Heigth = size(UserFile.Multimedia(1).Frame, 1);
+UserFile.Height = size(UserFile.Multimedia(1).Frame, 1);
 UserFile.Width = size(UserFile.Multimedia(1).Frame, 2);
 UserFile.NumOfChannels = size(UserFile.Multimedia(1).Frame, 3);
 
@@ -3157,7 +3482,7 @@ assert(isstruct(handles),'Передана не структура элементов интерфейса');
 FrameObj = findobj('Parent',handles.FileAxes, 'Tag','FrameObj');
 
 % считваем кадры, которые можно отобразить
-ImagesToShow = getappdata(handles.KAACV,'ImagesToShow');
+ImagesToShow = getappdata(handles.KAACVP,'ImagesToShow');
 
 % проверяем его
 assert(~isempty(ImagesToShow),...
@@ -3280,7 +3605,7 @@ switch ErrorCode
 end
 
 % генерируем модальное окно ошибки
-errordlg(InfoStirng,'KAACV','modal');
+errordlg(InfoStirng,'KAACVP','modal');
 
 
 % ПРОВЕРЯЕТ НАЛИЧИЕ УСТАНОВКИ ТУЛБОКСА НЕОБХОДИМОЙ ВЕРСИИ
@@ -3317,11 +3642,54 @@ if isempty(handles)         % значит запустил fig вместо m
     GenerateError('FigFIleOpened', true);  
     uiwait(gcf);        % ждем закрытия окна ошибки
     close(gcf);         % закрываем fig-файл
-    run('KAACV.m');     % запускаем корректное окно
+    run('KAACVP.m');     % запускаем корректное окно
     return;
 end
 
 warning('on','all');
+
+
+% ВОЗВРАЩАЕТ РАЗМЕР ИЗОБРАЖЕНИЯ, ИСПОЛЬЗОВАННОГО ДЛЯ ТРЕНИРОВКИ ДЕТЕКТОРА
+function TrainModelSize = ReturnFaceDetectorTrainModelSize(ClassificationModel)
+
+assert(isstring(ClassificationModel), 'ClassificationModel не строка');
+
+switch ClassificationModel
+    case {'Frontal Face (CART)','Анфас (CART)'}
+        TrainModelSize = [20 20];
+        
+    case {'Frontal Face (LBP)','Анфас (LBP)'}
+        TrainModelSize = [24 24];
+        
+    case {'Upper Body','Верх тела'}
+        TrainModelSize = [18 22];
+        
+    case {'Eye Pair','Пара глаз'}
+        TrainModelSize = [5 22];
+        
+    case {'Single Eye','Один глаз'}
+        TrainModelSize = [12 18];
+        
+    case {'Single Eye (CART)','Один глаз (CART)'}
+        TrainModelSize = [20 20];
+        
+    case {'Profile Face','Профиль'}
+        TrainModelSize = [20 30];
+        
+    case {'Mouth','Рот'}
+        TrainModelSize = [15 25];
+        
+    case {'Nose','Нос'}
+        TrainModelSize = [15 18];  
+        
+    otherwise
+        assert(0, 'Вызвана несуществующая модель классификации детектора лиц');
+end
+
+assert( all( size(TrainModelSize) == [1 2] ), 'На выходе - не двухэлементный вектор');
+
+
+
 
 
 
