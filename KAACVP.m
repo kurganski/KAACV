@@ -5,9 +5,29 @@
 %---------------------------------------------------------------------------------
 
 % !!!!!!!!!!!
-% выделение ROI работает криво, если выделяешь в обратную сторону
-% обнаружение лиц криво работает при использовании ROI -беда с абс координатами
-% при выводе изображений с keypoint писать в верхнем левом углу число найденных
+% включить функцию-блокировку инфтерфейса перед релизом
+
+%=======================================================================
+% Обмен данными:
+% При открытии изображения/видео - они  сохраняются в 'UserFile'; 
+% Для видео настраивается слайдер кадров
+%
+% Создается массив ImagesToShow, в котором хранятся доступные для отображения изображения
+% Далее ВСЕ функции отображения берут картинки только оттуда!!! 
+% При открытии образца - тоже самое, но массив называется PatternsToShow
+% 
+% При воспроизведении видео идет либо обновление массива ImagesToShow новым кадром
+% в FrameSlider_Callback, 
+% либо обработка этого кадра, после которой будет сгенерирован новый ImagesToShow
+%
+% При обработке берется текущий кадр (для изображения она равен 1)
+%
+% Изменяя метод обработки CV, происходит перестройка 
+% слайдеров и меню на панели параметров
+% Нажимая "Применить" - происходит сбор значений параметров в ApplyButton_Callback 
+% и передача их в функцию ComputerVisionProcessing
+%=======================================================================
+
 
 %%%% ИНИЦИАЛИЗАЦИЯ ПРИЛОЖЕНИЯ
 function varargout = KAACVP(varargin)
@@ -34,6 +54,13 @@ varargout{1} = handles.output;
 
 % ФУНКЦИЯ ПРИ ОТКРЫТИИ
 function KAACVP_OpeningFcn(hObject, ~, handles, varargin)
+
+% нужна для вызова SetParSlidersVisibleStatus и SetParMenusVisibleStatus
+global SHOW_IT; 
+global HIDE_IT;
+SHOW_IT = true;
+HIDE_IT = false;
+
 
 handles.output = hObject;
 guidata(hObject, handles);
@@ -97,9 +124,8 @@ end
 % отключаем предупреждения про графику
 % warning('off','all');
 
-% не хватает отображений предобраток (текущих картинок, а не только оригинала)
-% исправить в kaaip brisk пределы (30 14000)
-% там же поправить в бинаризации - брать 3 канала для rgb2gray, а не 1й
+
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%% МЕНЮ %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 
@@ -155,11 +181,7 @@ if UserFile.IsVideo == true
         handles.FrameSlider;...
         handles.VideoFrameInfo;...
         handles.VideoTimeInfo;...
-        ],'Visible','on');    
-    
-    set([...
-        handles.SaveFrameMenu;...
-        ],'Enable','on');
+        ],'Visible','on');   
     
 else                % если картинка
     
@@ -188,11 +210,13 @@ set([...
 
 set([...
     handles.ShowFrameMenu;...
+    handles.SaveFrameMenu;...
     ],'Enable','on');
 
 
 set([...
     handles.ImagesToShowMenu;...
+    handles.PatternsToShowMenu;...
     handles.StatisticsList;...
     handles.PatternAxes;...
     ],'Visible','off');
@@ -213,6 +237,9 @@ end
 image(  UserFile.Multimedia(1).Frame,...
         'Parent',handles.FileAxes,...
         'Tag', 'FrameObj');
+    
+ImagesToShow = struct('Images', UserFile.Multimedia(1).Frame);    
+setappdata(handles.KAACVP, 'ImagesToShow', ImagesToShow);
 
 % настраиваем строки методов списка обработки 
 % в зависимости от типа файла: видео/картинка   
@@ -224,6 +251,7 @@ handles.PlayPauseButton.Value = 0;      % ставим на паузу
 handles.ApplyButton.Value = 0;          % отжимаем кнопку обработки
 handles.FrameSlider.Value = 1;          % выставляю номер первого кадра  
 handles.ApplyButton.String = ReturnRusOrEngString(IsRusLanguage, 'Применить', 'Apply');
+handles.ImagesToShowMenu.String = ReturnRusOrEngString(IsRusLanguage,'Оригинал','Original');
 
 % обновляем элементы интерфейса 
 ZoomButton_Callback([], [], handles);
@@ -272,17 +300,35 @@ end
 % "СОХРАНИТЬ КАДР"
 function SaveFrameMenu_Callback(hObject, eventdata, handles)
 
-UserFile = getappdata(handles.KAACVP,'UserFile');
+ImagesToShow = getappdata(handles.KAACVP, 'ImagesToShow');
+Image = ImagesToShow(handles.ImagesToShowMenu.Value).Images;
 
-FrameNumber = handles.FrameSlider.Value;
-Image = UserFile.Multimedia(FrameNumber).Frame;
 IsRusLanguage = IsFigureLanguageRussian(handles);
+SaveImage(Image, IsRusLanguage);
 
-SaveImage(Image, FrameNumber, IsRusLanguage);
+
+% "СОХРАНИТЬ ОБРАЗЕЦ"
+function SavePatternMenu_Callback(hObject, eventdata, handles)
+
+PatternsToShow = getappdata(handles.KAACVP,'PatternsToShow');
+Image = PatternsToShow(handles.PatternsToShowMenu.Value).Images;
+
+IsRusLanguage = IsFigureLanguageRussian(handles);
+SaveImage(Image, IsRusLanguage);
 
 
 % "ПОКАЗАТЬ ШАБЛОН"
-function ShowPatternImageMenu_Callback(hObject, eventdata, handles)
+function ShowPatternMenu_Callback(hObject, eventdata, handles)
+
+PatternsToShow = getappdata(handles.KAACVP,'PatternsToShow');
+
+Image = PatternsToShow(handles.PatternsToShowMenu.Value).Images;
+
+try
+    imtool(Image);              % для матлаб-версии
+catch
+    OpenImageOutside(Image);    % для exe-версии
+end
 
 
 % "РУССКИЙ ЯЗЫК"
@@ -313,8 +359,9 @@ handles.FileMenu.Label = 'Файл';
 handles.OpenMenu.Label = 'Открыть';
 handles.ShowFrameMenu.Label = 'Показать кадр/изображение';
 handles.ROIShowMenu.Label = 'Показать ROI';
-handles.SaveFrameMenu.Label = 'Сохранить кадр';
-handles.ShowPatternImageMenu.Label = 'Показать образец';
+handles.SaveFrameMenu.Label = 'Сохранить кадр/изображение';
+handles.ShowPatternMenu.Label = 'Показать образец';
+handles.SavePatternMenu.Label = 'Сохранить образец';
 
 % handles..Label = '';
 % handles..Label = '';
@@ -359,8 +406,9 @@ handles.FileMenu.Label = 'File';
 handles.OpenMenu.Label = 'Open';
 handles.ShowFrameMenu.Label = 'Show frame/image';
 handles.ROIShowMenu.Label = 'Show ROI';
-handles.SaveFrameMenu.Label = 'Save frame';
-handles.ShowPatternImageMenu.Label = 'Show reference image';
+handles.SaveFrameMenu.Label = 'Save frame/image';
+handles.ShowPatternMenu.Label = 'Show reference image';
+handles.SavePatternMenu.Label = 'Save reference image';
 
 % handles..Label = '';
 % handles..Label = '';
@@ -391,10 +439,13 @@ function CVMethodMenu_Callback(hObject, eventdata, handles)
 %   необходимые элементы интерфейса таким образом, чтобы пользователь 
 %   не смог выбрать ни одного некорректного параметра
 
+
+global SHOW_IT;
+
 % прячем и делаем недоступными элементы интерфейса
 set(handles.ParametersPanel.Children,'Visible','off');
 handles.ROIShowMenu.Enable = 'off';
-handles.ShowPatternImageMenu.Visible = 'off';
+handles.ShowPatternMenu.Visible = 'off';
 handles.PatternAxesPanel.Visible = 'off';
 
 % очищаем старые пользовательские данные
@@ -416,6 +467,9 @@ handles.ParCheckBox2.Value = 0;
 handles.ParCheckBox1.TooltipString = '';
 handles.ParCheckBox2.TooltipString = '';
 
+% все элементы доступны по умолчанию
+set(handles.ParametersPanel.Children,'Enable','on');
+
 %------------------------------------------------------------------------------
 UserFile = getappdata(handles.KAACVP,'UserFile');
 
@@ -432,16 +486,15 @@ ImageIsMonochrome = all(all(  UserFile.Multimedia(RandomFrame).Frame(:)== 0 |...
 IsRusLanguage = IsFigureLanguageRussian(handles);
 
 ComputerVisionMethod = string(handles.CVMethodMenu.String(handles.CVMethodMenu.Value));
-
-% нужна для вызова SetParSlidersVisibleStatus и SetParMenusVisibleStatus
-ShowIt = true; 
         
 switch ComputerVisionMethod
     
+%=====================================================================
+%=====================================================================    
     case {'Распознавание текста','Optical character recognition'}
         
-        SetParSlidersVisibleStatus(1, ShowIt, handles);
-        SetParMenusVisibleStatus(1:2, ShowIt, handles);        
+        SetParSlidersVisibleStatus(1, SHOW_IT, handles);
+        SetParMenusVisibleStatus(1:2, SHOW_IT, handles);        
         SetROI_Visible(handles);
         
         handles.ROIx0.String = num2str(1);
@@ -529,19 +582,25 @@ switch ComputerVisionMethod
         X0Y0X1Y1Coords = [1 1 ImWidth ImHeight];        
         RefreshROIrect(handles, X0Y0X1Y1Coords, ROIPosition);
         
+%=====================================================================
+%=====================================================================
     case {'Чтение штрих-кода','Barcode reading'} 
         
+%=====================================================================
+%=====================================================================
     case {'Поиск областей с текстом','Text region detection'}  
         
+%=====================================================================
+%=====================================================================
     case {'Анализ пятен','Blob analysis'}   
         
-        SetParSlidersVisibleStatus(1:3, ShowIt, handles);
-        SetParMenusVisibleStatus(1, ShowIt, handles);   
+        SetParSlidersVisibleStatus(1:3, SHOW_IT, handles);
+        SetParMenusVisibleStatus(1, SHOW_IT, handles);   
         
         if ~ImageIsMonochrome          
             
-            SetParSlidersVisibleStatus(4, ShowIt, handles);
-            SetParMenusVisibleStatus(2:3, ShowIt, handles);        
+            SetParSlidersVisibleStatus(4, SHOW_IT, handles);
+            SetParMenusVisibleStatus(2:3, SHOW_IT, handles);        
         end
         
         handles.ParCheckBox1.Visible = 'on';
@@ -618,10 +677,12 @@ switch ComputerVisionMethod
         end
                 
         
+%=====================================================================
+%=====================================================================
     case {'Распознавание лиц','Face detection'}        
         
-        SetParSlidersVisibleStatus(1:6, ShowIt, handles);
-        SetParMenusVisibleStatus(1, ShowIt, handles);        
+        SetParSlidersVisibleStatus(1:6, SHOW_IT, handles);
+        SetParMenusVisibleStatus(1, SHOW_IT, handles);        
         SetROI_Visible(handles);        
         
         handles.ParMenu1.Visible = 'on';
@@ -707,15 +768,20 @@ switch ComputerVisionMethod
         % при вызове меню будут настроены слайдеры 1-4
         ParMenu1_Callback(hObject, eventdata, handles);
         
+%=====================================================================
+%=====================================================================
     case {'Распознавание людей','People detection'}
         
+%=====================================================================
+%=====================================================================
     case {'Распознавание объектов','Object detection'}
         
-        SetParSlidersVisibleStatus(5:9, ShowIt, handles);
-        SetParMenusVisibleStatus(1:4, ShowIt, handles);        
+        SetParSlidersVisibleStatus(5:9, SHOW_IT, handles);
+        SetParMenusVisibleStatus(1:4, SHOW_IT, handles);        
         SetROI_Visible(handles);    
         
-        handles.ShowPatternImageMenu.Visible = 'on';
+        handles.ShowPatternMenu.Enable = 'on';
+        handles.SavePatternMenu.Enable = 'on';
         handles.PatternAxesPanel.Visible = 'on';
         handles.PatternOpenButton.Visible = 'on';
         
@@ -845,13 +911,16 @@ switch ComputerVisionMethod
         X0Y0X1Y1Coords = [1 1 ImWidth ImHeight];        
         RefreshROIrect(handles, X0Y0X1Y1Coords, ROIPosition);
         
+%=====================================================================
+%=====================================================================
     case {'Создание 3D-изображения','3-D image creation'}        
         
-        SetParSlidersVisibleStatus(5:9, ShowIt, handles);
-        SetParMenusVisibleStatus(1:4, ShowIt, handles);      
-        SetROI_Visible(handles); 
+        SetParSlidersVisibleStatus(5:9, SHOW_IT, handles);
+        SetParMenusVisibleStatus(1:4, SHOW_IT, handles); 
         
-        handles.ShowPatternImageMenu.Visible = 'on';
+        handles.ShowPatternMenu.Enable = 'on';
+        handles.SavePatternMenu.Enable = 'on';
+        handles.PatternOpenButton.Visible = 'on';
         handles.PatternAxesPanel.Visible = 'on';
         
         handles.ParCheckBox1.Visible = 'on';    
@@ -1021,12 +1090,20 @@ switch ComputerVisionMethod
         X0Y0X1Y1Coords = [1 1 ImWidth ImHeight];        
         RefreshROIrect(handles, X0Y0X1Y1Coords, ROIPosition);        
         
+%=====================================================================
+%=====================================================================
     case {'Обработка видео','Video processing'}
         
+%=====================================================================
+%=====================================================================
     case {'Создание панорамы','Panorama creation'}
         
+%=====================================================================
+%=====================================================================
     case {'Распознавание движения','Motion detection'}
         
+%=====================================================================
+%=====================================================================
     otherwise
         assert(0, 'Ошибка в обращении к методам обработки');
         
@@ -1043,6 +1120,31 @@ function ImagesToShowMenu_Callback(~, ~, handles)
 
 % провожу отображение нужной картинки
 ShowMultimediaFile(handles);
+
+
+% ВЫБОР ОТОБРАЖАЕМОГО ИЗОБРАЖЕНИЯ-ОБРАЗЦА ИЗ ЭТАПОВ ОБРАБОТКИ
+function PatternsToShowMenu_Callback(hObject, eventdata, handles)
+
+% удаляю старый образец
+delete( findobj('Parent',handles.PatternAxes,'Tag', 'FrameObj') );
+
+% считваем кадры, которые можно отобразить
+PatternsToShow = getappdata(handles.KAACVP,'PatternsToShow');
+
+assert(size(PatternsToShow, 2) == size(handles.PatternsToShowMenu.String, 1),...
+        'Число строк не соответствует числу изображений'); 
+    
+% выбираю по требованию пользователя кадр
+ImageToView = PatternsToShow(handles.PatternsToShowMenu.Value).Images;
+
+% для метода image всегда нужно 3 канала
+if size(ImageToView,3) == 1
+    ImageToView(:,:,2) = ImageToView(:,:,1);
+    ImageToView(:,:,3) = ImageToView(:,:,1);
+end
+
+image(ImageToView, 'Parent',handles.PatternAxes, 'Tag', 'FrameObj');
+handles.PatternAxes.Visible = 'off';
 
 
 % МЕНЮ № 1 ПАРАМЕТРОВ 
@@ -1168,6 +1270,9 @@ function ParMenu3_Callback(hObject, eventdata, handles)
 % в зависимости от выбора пользователя необходимо отображать  
 % соответствующие обработке элементы интерфейса
 
+global SHOW_IT; 
+global HIDE_IT;
+
 IsRusLanguage = IsFigureLanguageRussian(handles);
 
 UserFile = getappdata(handles.KAACVP,'UserFile');
@@ -1182,12 +1287,9 @@ switch ComputerVisionMethod
     
 %----------------------------------------------------------- 
     case {'Распознавание объектов','Object detection'}    
-                
-        ShowIt = true;
-        HideIt = false;
-        
+                        
         % прячу все элементы, открываю затем только нужные
-        SetParSlidersVisibleStatus(1:4, HideIt, handles);
+        SetParSlidersVisibleStatus(1:4, HIDE_IT, handles);
         
         handles.ParCheckBox1.Visible = 'off';
         
@@ -1206,7 +1308,7 @@ switch ComputerVisionMethod
                 handles.ParCheckBox1.Visible = 'on';                
                 handles.ParCheckBox1.Visible = 'on';
                 
-                SetParSlidersVisibleStatus(1:4, ShowIt, handles);
+                SetParSlidersVisibleStatus(1:4, SHOW_IT, handles);
                 
                 handles.ParSlider1.Min              = 0.01;
                 handles.ParSlider1.Max              = 1;
@@ -1269,7 +1371,7 @@ switch ComputerVisionMethod
                 
                 handles.ParCheckBox1.Visible = 'on';
                 
-                SetParSlidersVisibleStatus(1:3, ShowIt, handles);
+                SetParSlidersVisibleStatus(1:3, SHOW_IT, handles);
                 
                 handles.ParSlider1.Min              = 0.01;
                 handles.ParSlider1.Max              = 0.99;
@@ -1309,7 +1411,7 @@ switch ComputerVisionMethod
                 end                
             case {'FAST'}
                              
-                SetParSlidersVisibleStatus(1:2, ShowIt, handles);               
+                SetParSlidersVisibleStatus(1:2, SHOW_IT, handles);               
                 
                 handles.ParSlider1.Min              = 0.01;
                 handles.ParSlider1.Max              = 0.99;
@@ -1340,7 +1442,7 @@ switch ComputerVisionMethod
                 
             case {'Харриса', 'Harris'}
                 
-                SetParSlidersVisibleStatus(2:3, ShowIt, handles);                
+                SetParSlidersVisibleStatus(2:3, SHOW_IT, handles);                
                                 
                 handles.ParSlider3.Min              = 3;
                 handles.ParSlider3.Max              = MinOfWidthAndHeight;
@@ -1374,7 +1476,7 @@ switch ComputerVisionMethod
                 
             case {'Минимального собственного значения', 'Minimum eigen'}                
                              
-                SetParSlidersVisibleStatus(2:3, ShowIt, handles);                
+                SetParSlidersVisibleStatus(2:3, SHOW_IT, handles);                
                 
                 handles.ParSlider3.Min              = 3;
                 handles.ParSlider3.Max              = MaxOfWidthAndHeight;
@@ -1412,7 +1514,7 @@ switch ComputerVisionMethod
                     'SURF (128 descriptor size)'}
                 
                 handles.ParCheckBox1.Visible = 'on';  
-                SetParSlidersVisibleStatus(2:4, ShowIt, handles);
+                SetParSlidersVisibleStatus(2:4, SHOW_IT, handles);
                 
                 % Порог
                 handles.ParSlider2.Min              = 100;
@@ -1464,30 +1566,30 @@ switch ComputerVisionMethod
 %-----------------------------------------------------------        
     case {'Создание 3D-изображения','3-D image creation'}
         
-        HideIt = false;
-        ShowIt = true;
+        HIDE_IT = false;
+        SHOW_IT = true;
         % прячу слайдеры, открываю затем только нужные
-        SetParSlidersVisibleStatus(1:4, HideIt, handles);
+        SetParSlidersVisibleStatus(1:4, HIDE_IT, handles);
         
         % это меню не нужно только в случае 'Norm8Point'
-        SetParMenusVisibleStatus(4, ShowIt, handles);
+        SetParMenusVisibleStatus(4, SHOW_IT, handles);
         
         switch ParMenu3Method
             
             case 'Norm8Point'
-                SetParMenusVisibleStatus(4, HideIt, handles);
+                SetParMenusVisibleStatus(4, HIDE_IT, handles);
                 
             case 'LMedS'
-                SetParSlidersVisibleStatus(1, ShowIt, handles);
+                SetParSlidersVisibleStatus(1, SHOW_IT, handles);
                 
             case 'RANSAC'
-                SetParSlidersVisibleStatus(1:3, ShowIt, handles);
+                SetParSlidersVisibleStatus(1:3, SHOW_IT, handles);
                 
             case 'MSAC'
-                SetParSlidersVisibleStatus(1:3, ShowIt, handles);
+                SetParSlidersVisibleStatus(1:3, SHOW_IT, handles);
                 
             case 'LTS'
-                SetParSlidersVisibleStatus([1 4], ShowIt, handles);
+                SetParSlidersVisibleStatus([1 4], SHOW_IT, handles);
                 
             otherwise
                 assert(0, 'в ParMethod4 несуществующая строка меню методов');
@@ -1509,8 +1611,6 @@ ParMenu4Method = string(handles.ParMenu4.String( handles.ParMenu4.Value ));
 
 switch ComputerVisionMethod   
 end
-
-
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%% КНОПКИ  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -1662,12 +1762,10 @@ if UserFile.IsVideo
         
         handles.ApplyButton.String = ReturnRusOrEngString(IsRusLanguage, 'Применить', 'Apply');        
         return;        
-    end
-    
+    end    
 else                                % для картинок    
     handles.ApplyButton.Value = 0;  % снимаем нажатое состояние     
 end
-
 
 % удаляем старые элементы
 delete(findobj('Parent',handles.FileAxes,'LineStyle','-.','EdgeColor','b'));
@@ -1822,6 +1920,51 @@ switch ProcessParameters.ComputerVisionMethod
         
     case {'Создание 3D-изображения','3-D image creation'}
         
+        ProcessParameters.Pattern = getappdata(handles.KAACVP,'Pattern');
+        
+        % слайдеры
+        ProcessParameters.NumTrials = handles.ParSlider1.Value;
+        ProcessParameters.Confidence = handles.ParSlider2.Value;
+        ProcessParameters.DistanceThreshold = handles.ParSlider3.Value;
+        ProcessParameters.InlierPercentage = handles.ParSlider4.Value;
+        ProcessParameters.MatchThreshold = handles.ParSlider5.Value;
+        ProcessParameters.MaxRatio = handles.ParSlider6.Value;
+        ProcessParameters.ThreshSURF = handles.ParSlider7.Value;
+        ProcessParameters.NumScaleLevelsSURF = handles.ParSlider8.Value;
+        ProcessParameters.NumOctavesSURF = handles.ParSlider9.Value;                
+        
+        % чек-боксы
+        % использование полного дескриптора SURF
+        if handles.ParCheckBox1.Value
+            ProcessParameters.NumOfDiscrSURF = 128;
+        else
+            ProcessParameters.NumOfDiscrSURF = 64;
+        end        
+        
+        ProcessParameters.UseUnique = handles.ParCheckBox2.Value;
+        
+        % меню
+        if handles.ParMenu1.Value == 1
+            ProcessParameters.MatchMethod = 'Exhaustive';
+        elseif handles.ParMenu1.Value == 2
+            ProcessParameters.MatchMethod = 'Approximate'; 
+        end
+        
+        if handles.ParMenu2.Value == 1
+            ProcessParameters.MatchMetric = 'SAD';
+        elseif handles.ParMenu2.Value == 2
+            ProcessParameters.MatchMetric = 'SSD'; 
+        end
+        
+        ProcessParameters.FundMatrixMethod = string(...
+            handles.ParMenu3.String (handles.ParMenu3.Value) );
+        
+        if handles.ParMenu4.Value == 1
+            ProcessParameters.FundMatrixMetric = 'Sampson';
+        elseif handles.ParMenu4.Value == 2
+            ProcessParameters.FundMatrixMetric = 'Algebraic'; 
+        end        
+        
     case {'Обработка видео','Video processing'}
         
     case {'Создание панорамы','Panorama creation'}
@@ -1829,8 +1972,7 @@ switch ProcessParameters.ComputerVisionMethod
     case {'Распознавание движения','Motion detection'}
         
     otherwise
-        assert(0, 'Ошибка в обращении к методам обработки');
-        
+        assert(0, 'Ошибка в обращении к методам обработки');        
 end
 
 %---------------------------------------------------------------------------------
@@ -1842,12 +1984,14 @@ ProcessResults = ComputerVisionProcessing(Image, ProcessParameters, IsRusLanguag
 setappdata(handles.KAACVP,'LABEL',ProcessResults.LABEL);
 setappdata(handles.KAACVP,'Boxes',ProcessResults.Boxes);
 setappdata(handles.KAACVP,'ImagesToShow',ProcessResults.ImagesToShow.Images);  
+setappdata(handles.KAACVP,'PatternsToShow',ProcessResults.PatternsToShow.Images);  
 
-% если образец не пустой он появится о осях
-image(ProcessResults.NewPattern,'Parent',handles.PatternAxes);
-handles.PatternAxes.Visible = 'off';
+% проверяю кол-во строк и текущее значение меню
+if length(handles.ImagesToShowMenu.String) ~= length(ProcessResults.StringOfImages)
+    handles.ImagesToShowMenu.Value = 1;    
+end
 
-handles.StatisticsList.String = string(ProcessResults.StatisticsString);    
+% ImagesToShowMenu заполняю всегда
 handles.ImagesToShowMenu.String = string(ProcessResults.StringOfImages);
 
 % если отображать нужно лишь оригинал, прячем выпадающий список
@@ -1857,23 +2001,41 @@ else
     handles.ImagesToShowMenu.Visible = 'on';
 end
 
-% если в результатах обработки нет списка данных - прячем интерфейсный список
+% если в результатах обработки нет списка данных
+% прячем список, иначе заполняем и отрисовываем
 if isempty(ProcessResults.StatisticsString)
     handles.StatisticsList.Visible = 'off';
 else
     handles.StatisticsList.Visible = 'on';
+    handles.StatisticsList.Value = 1;
+    handles.StatisticsList.String = string(ProcessResults.StatisticsString);
+    StatisticsList_Callback(hObject, eventdata, handles);
 end
 
-% если картинка, то пусть сразу будет виден результат
+% если в результатах обработки нет картинок-образцов или всего одна
+% прячем список, иначе заполняем и отрисовываем
+if isempty(ProcessResults.StringOfPatterns) || length(ProcessResults.StringOfPatterns) == 1
+    handles.PatternsToShowMenu.Visible = 'off';
+else
+    handles.PatternsToShowMenu.Visible = 'on';
+    handles.PatternsToShowMenu.String = string(ProcessResults.StringOfPatterns);
+    PatternsToShowMenu_Callback(hObject, eventdata, handles);
+end
+
+% если обрабатываем картинку, то пусть сразу будет виден результат
 if ~UserFile.IsVideo
     handles.ImagesToShowMenu.Value = length(ProcessResults.StringOfImages);
+    
+    if ~isempty(ProcessResults.StringOfPatterns)
+        handles.PatternsToShowMenu.Value = length(ProcessResults.StringOfPatterns);
+    end
 else    % для видео пользователь сам решает
 end
 
-% вызов прорисовки интерфейса
-StatisticsList_Callback(hObject, eventdata, handles);   
+% вызов прорисовки интерфейса   
 ImagesToShowMenu_Callback(hObject, eventdata, handles);
 
+% разблокируем элементы интерфейса
 DoyouWantToBlockInterface(false, handles, UserFile.IsVideo);
 
 %---------------------------------------------------------------------------------
@@ -1882,7 +2044,13 @@ DoyouWantToBlockInterface(false, handles, UserFile.IsVideo);
 function ZoomButton_Callback(~, ~, handles)
 
 UserFile = getappdata(handles.KAACVP,'UserFile');
-Pattern = getappdata(handles.KAACVP,'Pattern');
+
+PatternsToShow = getappdata(handles.KAACVP, 'PatternsToShow');
+if ~isempty(PatternsToShow)
+    Pattern = PatternsToShow(handles.PatternsToShowMenu.Value).Images;
+else
+    Pattern = [];
+end
 
 % если надо уменьшить    
 if handles.ZoomButton.Value == 0    
@@ -1978,6 +2146,9 @@ AreTopLimits = [false false true true];
 
 % уточненные X0Y0X1Y1Coords и ROIPosition 
 X0Y0X1Y1Coords = LimitCheck(X0Y0X1Y1Coords, Limits, AreTopLimits);
+
+ROIPosition(1) = X0Y0X1Y1Coords(1);
+ROIPosition(2) = X0Y0X1Y1Coords(2);
 ROIPosition(3) = X0Y0X1Y1Coords(3) - X0Y0X1Y1Coords(1);
 ROIPosition(4) = X0Y0X1Y1Coords(4) - X0Y0X1Y1Coords(2);
 
@@ -2001,29 +2172,17 @@ function PatternOpenButton_Callback(~, ~, handles)
 
 IsRusLanguage = IsFigureLanguageRussian(handles);
 
-ComputerVisionMethod = string(handles.CVMethodMenu.String(handles.CVMethodMenu.Value));
+Pattern = OpenPatternImage(IsRusLanguage);
+UserFile = getappdata(handles.KAACVP,'UserFile');
 
+if isempty(Pattern)
+    return;
+end
+
+ComputerVisionMethod = string(handles.CVMethodMenu.String(handles.CVMethodMenu.Value));
 switch ComputerVisionMethod
     
-    case {'Распознавание объектов','Object detection'}
-
-        Pattern = OpenPatternImage(IsRusLanguage);
-
-        if isempty(Pattern)
-            return;
-        end
-        
-        % размещаем откытую картинку
-        image(Pattern, 'Parent',handles.PatternAxes);
-        handles.PatternAxes.Visible = 'off';
-        
-        % сохраняем ее
-        setappdata(handles.KAACVP, 'Pattern',Pattern); 
-        
-        % в зависимоти от статуса кнопки зума изменится размер оси
-        ZoomButton_Callback([], [], handles);
-        
-        handles.ShowPatternImageMenu.Visible = 'on';    
+    case {'Распознавание объектов','Object detection'}   
         
         % открыв шаблон мы не можем менять его координаты ROI
         set([...
@@ -2033,7 +2192,31 @@ switch ComputerVisionMethod
             handles.ROIy1;...
             ],'Enable','off');
         
+    case {'Создание 3D-изображения','3-D image creation'}
+        
+        % тут должны быть только картинки
+        assert( ~ UserFile.IsVideo, 'Для видео не должна быть доступна обработка в 3D')
+        
+        if any(size(UserFile.Multimedia.Frame) ~= size(Pattern))
+            GenerateError('ImageAndPatternSizesAreNotEqual', IsRusLanguage);
+            return;
+        end                
 end
+
+% размещаем откытую картинку
+image(Pattern, 'Parent',handles.PatternAxes);
+handles.PatternAxes.Visible = 'off';
+
+% сохраняю образцы 
+PatternsToShow = struct('Images', Pattern);
+setappdata(handles.KAACVP, 'PatternsToShow',PatternsToShow);
+
+% в зависимоти от статуса кнопки зума изменится размер оси
+ZoomButton_Callback([], [], handles);
+
+handles.ShowPatternMenu.Visible = 'on';
+
+
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%% СЛАЙДЕРЫ %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -2746,6 +2929,685 @@ function ParCheckBox2_Callback(hObject, eventdata, handles)
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%% ФУНКЦИИ %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    
+% ФУНКЦИЯ ОБРАБОТКИ ИЗОБРАЖЕНИЯ/КАДРА
+function ProcessResults = ComputerVisionProcessing(Image, ProcessParameters, IsRusLanguage)
+
+assert(islogical(IsRusLanguage),'Флаг языка не логический');
+assert(isstruct(ProcessParameters), 'ProcessParameters - не структура');
+assert(~isempty(ProcessParameters), 'Передана пустая структура параматеров обработки');
+CheckImage(Image);
+
+ProcessResults = struct();
+
+% заполняю 1ое изображение и 1ю строку списка промежуточных результатов
+ImagesToShow = struct('Images',Image);
+StringOfImages = ReturnRusOrEngString(IsRusLanguage, 'Оригинал', 'Original image');
+
+% создаем пустышки для выходных аргументов 
+PatternsToShow = []; 
+StringOfPatterns = [];
+Boxes = []; 
+StatisticsString = []; 
+LABEL = [];
+
+% использую компактную форму записи
+X0 = ProcessParameters.X0;
+X1 = ProcessParameters.X1;
+Y0 = ProcessParameters.Y0;
+Y1 = ProcessParameters.Y1;      
+
+% в зависимости от метода обработки - обрабатываю
+switch ProcessParameters.ComputerVisionMethod
+ 
+%========================================================================     
+%========================================================================    
+    case {'Распознавание текста','Optical character recognition'}        
+        
+        results = ocr(  Image(Y0:Y1, X0:X1, :),...
+                        'TextLayout',ProcessParameters.layout,...
+                        'Language',ProcessParameters.lang);
+        
+        % найденный текст и его координаты 
+        StatisticsString = results.Words;       
+        Boxes = results.WordBoundingBoxes; 
+        
+        % убираем слабые результаты
+        Boxes = Boxes(results.WordConfidences > ProcessParameters.thresh,:);    
+        StatisticsString = StatisticsString(results.WordConfidences > ProcessParameters.thresh);
+        
+        % делаем координаты текста абсолютными для пользовательского файла
+        Boxes(:,1) = Boxes(:,1) + X0;
+        Boxes(:,2) = Boxes(:,2) + Y0;                          
+        
+        if isempty(StatisticsString)            
+            StatisticsString = ReturnRusOrEngString(IsRusLanguage, 'нет результатов', 'no results');            
+        end
+ 
+%========================================================================         
+%========================================================================  
+    case {'Чтение штрих-кода','Barcode reading'} 
+ 
+%========================================================================         
+%========================================================================  
+    case {'Поиск областей с текстом','Text region detection'}  
+     
+%========================================================================  
+%========================================================================     
+    case {'Анализ пятен','Blob analysis'} 
+        
+        if size(Image,3) == 3            
+            GrayImage = rgb2gray(Image);
+        else
+            GrayImage = Image;
+        end
+        
+        % если не ч/б, проведем бинаризацию
+        if ~all( all( GrayImage == 0 | GrayImage == 1 ))    
+            
+            switch ProcessParameters.BinarizationType
+                
+                case {'Адаптивная', 'Adaptive'}      
+                    
+                    ImageBW = imbinarize(GrayImage,'adaptive',...
+                                        'Sensitivity',ProcessParameters.SensOrThersh,...
+                                        'ForegroundPolarity',ProcessParameters.Foreground);
+                                    
+                case {'Глобальная (Оцу)', 'Global (Otsu)'}                     
+                    ImageBW = imbinarize(GrayImage);
+                    
+                case {'Глобальная', 'Global'}                       
+                    ImageBW = imbinarize(GrayImage, ProcessParameters.SensOrThersh);   
+                
+                otherwise
+                    assert(0, 'Выбран некорректный метод бинаризации');
+            end
+        end
+        
+        % задаем свойства объекта BlobAnalysis
+        hBlob = vision.BlobAnalysis;
+        hBlob.AreaOutputPort = true;
+        hBlob.CentroidOutputPort = true;
+        hBlob.BoundingBoxOutputPort = false;
+        
+        hBlob.PerimeterOutputPort = true;
+        hBlob.LabelMatrixOutputPort = true;
+        hBlob.Connectivity =        ProcessParameters.Conn;
+        hBlob.MaximumCount =        ProcessParameters.MaximumCount;
+        hBlob.MinimumBlobArea =     ProcessParameters.MinimumBlobArea;
+        hBlob.MaximumBlobArea =     ProcessParameters.MaximumBlobArea;
+        hBlob.ExcludeBorderBlobs =  ProcessParameters.BorderBlobs;
+        
+        % получаем площадь, центр, периметр и разметку пятен
+        [AREA,CENTEROID,PERIMETER,LABEL] = step(hBlob, logical(ImageBW)); 
+        
+        CENTEROID = round(CENTEROID);
+        PERIMETER = round(PERIMETER);
+                
+        % создаем и заполняем список пятен
+        StatisticsString = cell(1,size(AREA,1));
+        
+        for x = 1:size(AREA,1)
+            
+            StatisticsString{x} = ReturnRusOrEngString(IsRusLanguage,...
+                                ['Пятно № ' num2str(x) ...
+                                ': площадь / периметр = ' num2str(AREA(x))...
+                                ' / ' num2str(PERIMETER(x)) ' (пикс.)'],...
+                                ...
+                                ['Blob № ' num2str(x) ...
+                                ': area / perimeter = ' num2str(AREA(x))...
+                                ' / ' num2str(PERIMETER(x)) ' (pix.)']); 
+        end   
+        
+        if isempty(AREA)       
+            StatisticsString = ReturnRusOrEngString(IsRusLanguage, ...
+                                        'нет результатов', 'no results');
+        end 
+        
+        %-----------------------------------------------------------------------------------
+        % заполняю массив ImagesToShow и список операций обработок
+        
+        ImagesToShow(end+1).Images = im2double(ImageBW);        
+        StringOfImages{end+1} = ReturnRusOrEngString(IsRusLanguage,...
+                                    'Результат бинаризации',...
+                                    'Binarization result');
+                                
+        % запоминаю изображение полутоновое с крестами в центрах пятен
+        ImagesToShow(end+1).Images = InsertKeypointsAndText(im2double(ImageBW), CENTEROID);
+            
+        StringOfImages{end+1} = ReturnRusOrEngString(IsRusLanguage,...
+                                'Обнаруженные пятна на бинарном изображении',...
+                                'Recognized blobs on binary image');
+        
+        % запоминаю изображение исходное с крестами в центрах пятен
+        ImagesToShow(end+1).Images = InsertKeypointsAndText(ImagesToShow(1).Images, CENTEROID);
+                
+        StringOfImages{end+1} = ReturnRusOrEngString(IsRusLanguage,...
+                                'Обнаруженные пятна на оригинале',...
+                                'Recognized blobs on original image');         
+       
+%========================================================================  
+%========================================================================   
+    case {'Распознавание лиц','Face detection'}
+        
+        % объект-детектор
+        faceDetector = vision.CascadeObjectDetector(...
+                            'MinSize',ProcessParameters.MinSize,...
+                            'MaxSize',ProcessParameters.MaxSize,...    
+                            'ScaleFactor',ProcessParameters.ScaleFactor,...    
+                            'MergeThreshold',ProcessParameters.MergeThreshold,...    
+                            'ClassificationModel',ProcessParameters.Model,...    
+                            'UseROI', true);
+        
+        ROI = [X0 Y0 X1-X0 Y1-Y0];
+        
+        % извлекаем лица
+        Boxes = step(faceDetector, Image, ROI);    % размерность Nx4      
+        
+        if ~isempty(Boxes)
+            % вставляем прямоугольники с описаниями
+            ImageWithFaces = insertShape(Image, 'rectangle', Boxes, ...
+                                'LineWidth', 2, 'Color', 'blue', 'Opacity', 1);
+
+            % запоминаю картинку 
+            ImagesToShow(end+1).Images = ImageWithFaces;                
+            StringOfImages{end+1} = ReturnRusOrEngString(IsRusLanguage,...
+                                                    'Обнаруженные лица',...
+                                                    'Recognized faces');   
+        else
+            StatisticsString = ReturnRusOrEngString(IsRusLanguage,...
+                                    'нет результатов',...
+                                    'no results'); 
+        end
+        
+%========================================================================       
+%========================================================================                 
+    case {'Распознавание людей','People detection'}
+     
+%========================================================================  
+%========================================================================     
+    case {'Распознавание объектов','Object detection'}
+        
+        if size(Image,3) == 3
+            GrayImage = rgb2gray(Image);
+        end
+        
+        Pattern = ProcessParameters.Pattern;
+        
+        % нужны полутоновые картинки
+        if size(Pattern,3) == 3
+            GrayPattern = rgb2gray(Pattern);
+        end
+        
+        % считываем тип детектора для ключевых точек и детектируем их
+        switch ProcessParameters.DetectorType
+            
+            case 1
+                
+                PatternPoints = detectMSERFeatures(GrayPattern,...
+                                'MaxAreaVariation',ProcessParameters.Slider1Value,...
+                                'ThresholdDelta',ProcessParameters.Slider2Value,...
+                                'RegionAreaRange',...
+                                [ProcessParameters.Slider3Value ProcessParameters.Slider4Value]);
+                
+                ScenePoints = detectMSERFeatures(GrayImage,...
+                                'MaxAreaVariation',ProcessParameters.Slider1Value,...
+                                'ThresholdDelta',ProcessParameters.Slider2Value,...
+                                'RegionAreaRange',...
+                                [ProcessParameters.Slider3Value ProcessParameters.Slider4Value]);
+                
+            case 2
+                
+                PatternPoints = detectBRISKFeatures(GrayPattern,...
+                                'MinContrast',ProcessParameters.Slider1Value,...
+                                'NumOctaves',ProcessParameters.Slider3Value,...
+                                'MinQuality',ProcessParameters.Slider2Value);
+                
+                ScenePoints = detectBRISKFeatures(GrayImage,...
+                                'MinContrast',ProcessParameters.Slider1Value,...
+                                'NumOctaves',ProcessParameters.Slider3Value,...
+                                'MinQuality',ProcessParameters.Slider2Value);
+                
+            case 3
+                
+                PatternPoints = detectFASTFeatures(GrayPattern,...
+                                'MinContrast',ProcessParameters.Slider1Value,...
+                                'MinQuality',ProcessParameters.Slider2Value);
+                
+                ScenePoints = detectFASTFeatures(GrayImage,...
+                                'MinContrast',ProcessParameters.Slider1Value,...
+                                'MinQuality',ProcessParameters.Slider2Value);
+                
+            case 4
+                
+                PatternPoints = detectHarrisFeatures(GrayPattern,...
+                                'FilterSize',ProcessParameters.Slider3Value,...
+                                'MinQuality',ProcessParameters.Slider2Value);
+                
+                ScenePoints = detectHarrisFeatures(GrayImage,...
+                                'FilterSize',ProcessParameters.Slider3Value,...
+                                'MinQuality',ProcessParameters.Slider2Value);
+                
+            case 5
+                
+                PatternPoints = detectMinEigenFeatures(GrayPattern,...
+                                'FilterSize',ProcessParameters.Slider3Value,...
+                                'MinQuality',ProcessParameters.Slider2Value);
+                
+                ScenePoints = detectMinEigenFeatures(GrayImage,...
+                                'FilterSize',ProcessParameters.Slider3Value,...
+                                'MinQuality',ProcessParameters.Slider2Value);
+                
+            case 6      
+                
+                PatternPoints = detectSURFFeatures(GrayPattern,...
+                                'MetricThreshold',ProcessParameters.Slider2Value,...
+                                'NumOctaves',ProcessParameters.Slider3Value,...
+                                'NumScaleLevels',ProcessParameters.Slider4Value);
+                
+                ScenePoints = detectSURFFeatures(GrayImage,...
+                                'MetricThreshold',ProcessParameters.Slider2Value,...
+                                'NumOctaves',ProcessParameters.Slider3Value,...
+                                'NumScaleLevels',ProcessParameters.Slider4Value);
+                SURFSize = 64;
+                
+            case 7                  
+                
+                PatternPoints = detectSURFFeatures(GrayPattern,...
+                                'MetricThreshold',ProcessParameters.Slider2Value,...
+                                'NumOctaves',ProcessParameters.Slider3Value,...
+                                'NumScaleLevels',ProcessParameters.Slider4Value);
+                            
+                ScenePoints = detectSURFFeatures(GrayImage,...
+                                'MetricThreshold',ProcessParameters.Slider2Value,...
+                                'NumOctaves',ProcessParameters.Slider3Value,...
+                                'NumScaleLevels',ProcessParameters.Slider4Value);
+                SURFSize = 128;
+                
+            otherwise
+                assert(0,'Что то пошло не так...Выбрали несуществующую строчку меню');
+        end
+        
+        % извлекаем фичи образца и сцены
+        % для surf отдельный вызов
+        if ProcessParameters.DetectorType == 6 || ProcessParameters.DetectorType == 7
+            
+            [PatternFeatures, PatternPoints] = extractFeatures(...
+                GrayPattern,PatternPoints,...
+                'Upright',ProcessParameters.UpRight, 'SURFSize',SURFSize);
+            
+            [SceneFeatures, ScenePoints] = extractFeatures(GrayImage, ScenePoints,...
+                'Upright',ProcessParameters.UpRight, 'SURFSize',SURFSize);
+        else
+            
+            [PatternFeatures, PatternPoints] = extractFeatures(...
+                GrayPattern,PatternPoints,'Upright',ProcessParameters.UpRight);
+            
+            [SceneFeatures, ScenePoints] = extractFeatures(GrayImage, ScenePoints,...
+                'Upright',ProcessParameters.UpRight);
+            
+        end
+        
+        % сравниваем фичи, выделяя пары похожих
+        % для бинарных точек вызов без метрики
+        if      ProcessParameters.DetectorType == 1 ||...
+                ProcessParameters.DetectorType == 6 || ...
+                ProcessParameters.DetectorType == 7
+            
+            Pairs = matchFeatures(PatternFeatures, SceneFeatures, ...
+                        'Method', ProcessParameters.MatchMethod,...
+                        'MatchThreshold',ProcessParameters.MatchThreshold,...
+                        'MaxRatio',ProcessParameters.MaxRatio,...
+                        'Metric',ProcessParameters.Metric,...
+                        'Unique',ProcessParameters.UseUnique);
+                    
+        else
+            
+            Pairs = matchFeatures(PatternFeatures, SceneFeatures, ...
+                        'ComputerVisionMethod', ProcessParameters.MatchMethod,...
+                        'MatchThreshold',ProcessParameters.MatchThreshold,...
+                        'MaxRatio',ProcessParameters.MaxRatio,...
+                        'Unique',ProcessParameters.UseUnique);
+            
+        end
+        
+        % извлекаю из всех доступных точек только совпавшие по их адресам в Pairs
+        MatchedPatternPoints = PatternPoints(Pairs(:, 1), :);
+        MatchedScenePoints = ScenePoints(Pairs(:, 2), :);
+        
+        % провожу анализ их геометрических искажений
+        [~,~,ResultPoints,~] = estimateGeometricTransform(...
+                                MatchedPatternPoints, ...
+                                MatchedScenePoints,...
+                                ProcessParameters.TransformationType,... 
+                                'MaxNumTrials',ProcessParameters.MaxNumTrials, ...
+                                'Confidence',ProcessParameters.Confidence,...
+                                'MaxDistance', ProcessParameters.MaxDistance);      
+        
+        %-----------------------------------------------------------------------------------
+        % заполняю массив ImagesToShow и список операций обработок
+        
+        if size(Image,3) == 3
+            GrayImage = rgb2gray(Image);
+            
+            ImagesToShow(end+1).Images = GrayImage;
+            StringOfImages{end+1} = ReturnRusOrEngString(IsRusLanguage,...
+                                        'Полутоновое изображение',...
+                                        'Grayscale image');
+        end         
+        
+        ImagesToShow(end+1).Images = InsertKeypointsAndText(GrayImage, ScenePoints); 
+        StringOfImages{end+1} = ReturnRusOrEngString(IsRusLanguage,...
+                                    'Найденные ключевые точки',...
+                                    'Found keypoints');                                
+            
+        ImagesToShow(end+1).Images = InsertKeypointsAndText(GrayImage, MatchedScenePoints);    
+        StringOfImages{end+1} = ReturnRusOrEngString(IsRusLanguage,...
+                                    'Совпадающие ключевые точки',...
+                                    'Matched keypoints');                                
+        
+        ImagesToShow(end+1).Images = InsertKeypointsAndText(GrayImage, ResultPoints);             
+        StringOfImages{end+1} = ReturnRusOrEngString(IsRusLanguage,...
+                                    'Корректные совпадающие ключевые точки (полутоновое изображение)',...
+                                    'Сorrect matched keypoints (grayscale image)');
+                                
+        if size(Image,3) == 3
+            
+            ImagesToShow(end+1).Images = InsertKeypointsAndText(Image, ResultPoints);           
+            StringOfImages{end+1} = ReturnRusOrEngString(IsRusLanguage,...
+                        'Корректные совпадающие ключевые точки (исходное изображение)',...
+                        'Сorrect matched keypoints (original image)');
+        end       
+            
+        %-----------------------------------------------------------------------------------
+        % заполняю массив PatternsToShow и список операций обработок
+        
+        PatternsToShow(end+1).Images = Pattern;
+        StringOfPatterns{end+1} = ReturnRusOrEngString(IsRusLanguage,...
+                                                    'Образец','Pattern');                                                
+        if size(Pattern,3) == 3
+            
+            PatternsToShow(end+1).Images = GrayPattern;
+            StringOfPatterns{end+1} = ReturnRusOrEngString(IsRusLanguage,...
+                                                    'Полутоновый образец','Pattern');
+        end
+            
+        PatternsToShow(end+1).Images = InsertKeypointsAndText(GrayPattern, PatternPoints); 
+        StringOfPatterns{end+1} = ReturnRusOrEngString(IsRusLanguage,...
+                                    'Найденные ключевые точки',...
+                                    'Found keypoints');
+
+        PatternsToShow(end+1).Images = InsertKeypointsAndText(GrayPattern, MatchedPatternPoints);
+        StringOfPatterns{end+1} = ReturnRusOrEngString(IsRusLanguage,...
+                                    'Совпадающие ключевые точки',...
+                                    'Matched keypoints');
+       
+%========================================================================   
+%========================================================================  
+    case {'Создание 3D-изображения','3-D image creation'}        
+        
+        % нужны полутоновые картинки
+        if size(Image,3) == 3
+            GrayImage = rgb2gray(Image);
+        end
+        
+        Pattern = ProcessParameters.Pattern;
+        
+        if size(Pattern,3) == 3
+            GrayPattern = rgb2gray(Pattern);
+        end
+        
+        PatternPoints = detectSURFFeatures(GrayPattern,...
+                                'MetricThreshold',ProcessParameters.ThreshSURF,...
+                                'NumOctaves',ProcessParameters.NumOctavesSURF,...
+                                'NumScaleLevels',ProcessParameters.NumScaleLevelsSURF);
+                            
+        ImagePoints = detectSURFFeatures(GrayImage,...
+                                'MetricThreshold',ProcessParameters.ThreshSURF,...
+                                'NumOctaves',ProcessParameters.NumOctavesSURF,...
+                                'NumScaleLevels',ProcessParameters.NumScaleLevelsSURF);
+        
+        [PatternFeatures, PatternPoints] = extractFeatures(...
+                GrayPattern,PatternPoints,...
+                'Upright',false, ...
+                'SURFSize',ProcessParameters.NumOfDiscrSURF);
+            
+        [ImageFeatures, ImagePoints] = extractFeatures(...
+                GrayImage, ImagePoints,...
+                'Upright',false,...
+                'SURFSize',ProcessParameters.NumOfDiscrSURF);
+        
+            
+        Pairs = matchFeatures(PatternFeatures, ImageFeatures, ...
+                'Method', ProcessParameters.MatchMethod,...
+                'MatchThreshold',ProcessParameters.MatchThreshold,...
+                'MaxRatio',ProcessParameters.MaxRatio,...
+                'Metric',ProcessParameters.MatchMetric,...
+                'Unique',ProcessParameters.UseUnique);            
+        
+        % извлекаю из всех доступных точек только совпавшие по их адресам в Pairs
+        MatchedPatternPoints = PatternPoints(Pairs(:, 1), :);
+        MatchedImagePoints = ImagePoints(Pairs(:, 2), :);  
+        
+        % вычисляю фундаментальную матрицу...пытаюсь
+        try
+            FundMatrix = [];
+            
+            switch  ProcessParameters.FundMatrixMethod
+                
+                case 'Norm8Point'
+
+                    [FundMatrix, EpipolarInliers] = estimateFundamentalMatrix( ...
+                        MatchedImagePoints, ...
+                        MatchedPatternPoints,...
+                        'Method', ProcessParameters.FundMatrixMethod);
+
+                case {'RANSAC', 'MSAC'}
+
+                    [FundMatrix, EpipolarInliers] = estimateFundamentalMatrix(...
+                        MatchedImagePoints, ...
+                        MatchedPatternPoints,...
+                        'Method', ProcessParameters.FundMatrixMethod, ...
+                        'DistanceType',ProcessParameters.FundMatrixMetric,...
+                        'NumTrials', ProcessParameters.NumTrials, ...
+                        'DistanceThreshold', ProcessParameters.DistanceThreshold,...
+                        'Confidence', ProcessParameters.Confidence);
+                case 'LTS'
+
+                    [FundMatrix, EpipolarInliers] = estimateFundamentalMatrix(  ...
+                        MatchedImagePoints, ...
+                        MatchedPatternPoints,...
+                        'Method', ProcessParameters.FundMatrixMethod, ...
+                        'DistanceType',ProcessParameters.FundMatrixMetric,...
+                        'InlierPercentage',ProcessParameters.InlierPercentage,...
+                        'NumTrials', ProcessParameters.NumTrials);
+                    
+                case 'LMedS'
+
+                    [FundMatrix, EpipolarInliers] = estimateFundamentalMatrix(  ...
+                        MatchedImagePoints, ...
+                        MatchedPatternPoints,...
+                        'Method', ProcessParameters.FundMatrixMethod, ...
+                        'DistanceType',ProcessParameters.FundMatrixMetric,...
+                        'NumTrials', ProcessParameters.NumTrials);
+                    
+                otherwise
+                    assert(0, 'Ошибка в обращении к методам вычисления фунд матрицы в 3d');
+            end
+
+        catch ME
+            
+            if strcmp(ME.identifier, 'vision:points:notEnoughMatchedPts')
+                StatisticsString{1,1} = ReturnRusOrEngString(IsRusLanguage,...
+                    'Недостаточно совпадающих ключевых точек.',...
+                    'Not enough matching keypoints.');
+                
+                % минимальное число необходимых точек
+                switch ProcessParameters.FundMatrixMethod
+                    case {'Norm8Point', 'RANSAC', 'MSAC'}
+                        PointsNeeded = 8;
+                    case 'LMedS'
+                        PointsNeeded = 16;
+                    case 'LTS'
+                        PointsNeeded = num2str(ceil (800 / ProcessParameters.InlierPercentage));
+                end
+                
+                % считаю сколько нашли совпадающих точек
+                if isempty(Pairs)
+                    PointFound = 0;
+                else
+                    PointFound = size(Pairs,1);
+                end
+                
+                StatisticsString{2,1} = ReturnRusOrEngString(IsRusLanguage,...
+                                                    ['Необходимо / найдено: '...
+                                                    num2str(PointsNeeded) ' / '...
+                                                    num2str(PointFound)...
+                                                    ],...
+                                                    ['Needed / found: '...
+                                                    num2str(PointsNeeded) ' / '...
+                                                    num2str(PointFound)...
+                                                    ]);
+                
+            elseif strcmp(ME.identifier, 'vision:points:notEnoughInlierMatches')
+                
+                StatisticsString = ReturnRusOrEngString(IsRusLanguage,...
+                                'Найдено недостаточно точек "не-выбросов"',...
+                                'Not enough inliers found'); 
+            end
+        end                        
+        
+        % если удалось вычислить матрицу
+        if ~isempty(FundMatrix)
+            
+            % делаем доп проверки
+            if isEpipoleInImage(FundMatrix, size(Image))
+
+                 StatisticsString = ReturnRusOrEngString(IsRusLanguage,...
+                                    'Эпиполяры находятся внутри изображения',...
+                                    'The epipoles are inside the user image'); 
+
+            elseif isEpipoleInImage(FundMatrix', size(Pattern))
+
+                 StatisticsString = ReturnRusOrEngString(IsRusLanguage,...
+                                    'Эпиполяры находятся внутри изображения-образца',...
+                                    'The epipoles are inside the pattern'); 
+                                
+            % если доп проверки провалились, можно продолжить
+            else            
+                % работаем дальше
+                ImageInlierPoints   = MatchedImagePoints(EpipolarInliers, :);
+                PatternInlierPoints = MatchedPatternPoints(EpipolarInliers, :);
+
+                % вычисляем выпрямляющие преобразования
+                [t1, t2] = estimateUncalibratedRectification(   FundMatrix, ...
+                                                                ImageInlierPoints.Location,...
+                                                                PatternInlierPoints.Location,...
+                                                                size(Pattern));            
+                tform1 = projective2d(t1);
+                tform2 = projective2d(t2);
+
+                % выпрямляем картинку
+                [ImageRect, PatternRect] = rectifyStereoImages(Image, Pattern,...
+                                                    tform1, tform2, 'OutputView', 'full');
+
+                Image3D = stereoAnaglyph(ImageRect, PatternRect);
+            end
+        end
+    
+        % если нигде ничего не вылетело
+        if isempty(StatisticsString)
+            %-----------------------------------------------------------------------------------
+            % заполняю массивы ImagesToShow PatternToShow и списки операций обработок
+            ImagesToShow(end+1).Images = GrayImage;
+            StringOfImages{end+1} = ReturnRusOrEngString(IsRusLanguage,...
+                'Полутоновое изображение',...
+                'Grayscale image');            
+            
+            ImagesToShow(end+1).Images = InsertKeypointsAndText(GrayImage, round(ImagePoints.Location)); 
+            StringOfImages{end+1} = ReturnRusOrEngString(IsRusLanguage,...
+                'Найденные ключевые точки (SURF)',...
+                'Found keypoints (SURF)');
+            
+            ImagesToShow(end+1).Images = InsertKeypointsAndText(GrayImage, round(MatchedImagePoints.Location)); 
+            StringOfImages{end+1} = ReturnRusOrEngString(IsRusLanguage,...
+                'Совпадающие ключевые точки (SURF)',...
+                'Matched found keypoints (SURF)');            
+            
+            ImagesToShow(end+1).Images = ImageRect; 
+            StringOfImages{end+1} = ReturnRusOrEngString(IsRusLanguage,...
+                'Трансформированное изображение',...
+                'Rectified Image');
+            
+            ImagesToShow(end+1).Images = Image3D;
+            StringOfImages{end+1} = ReturnRusOrEngString(IsRusLanguage,...
+                '3D-изображение',...
+                '3D-image');
+            
+            %----------------------------------------------------------------
+            PatternsToShow(end+1).Images = Pattern;
+            StringOfPatterns{end+1} = ReturnRusOrEngString(IsRusLanguage,...
+                                                    'Образец','Pattern');   
+            if size(Pattern,3) == 3
+
+                PatternsToShow(end+1).Images = GrayPattern;
+                StringOfPatterns{end+1} = ReturnRusOrEngString(IsRusLanguage,...
+                                                        'Полутоновый образец','Pattern');
+            end
+
+            PatternsToShow(end+1).Images = InsertKeypointsAndText(GrayPattern, PatternPoints);
+            StringOfPatterns{end+1} = ReturnRusOrEngString(IsRusLanguage,...
+                                        'Найденные ключевые точки',...
+                                        'Found keypoints');
+
+            PatternsToShow(end+1).Images = InsertKeypointsAndText(GrayPattern, MatchedPatternPoints);
+            StringOfPatterns{end+1} = ReturnRusOrEngString(IsRusLanguage,...
+                                        'Совпадающие ключевые точки',...
+                                        'Matched keypoints'); 
+
+            PatternsToShow(end+1).Images = PatternRect;
+            StringOfPatterns{end+1} = ReturnRusOrEngString(IsRusLanguage,...
+                                        'Трансформированный образец',...
+                                        'Rectified Pattern');
+        end        
+        
+%========================================================================  
+%========================================================================  
+    case {'Обработка видео','Video processing'}
+        
+%========================================================================  
+%========================================================================  
+    case {'Создание панорамы','Panorama creation'}
+        
+%========================================================================  
+%========================================================================  
+    case {'Распознавание движения','Motion detection'}
+        
+%========================================================================  
+%========================================================================  
+    otherwise
+        assert(0, 'Ошибка в обращении к методам обработки');        
+end   
+
+% проверяем выходные изображения
+for x = 1:size(ImagesToShow,2)
+    CheckImage(ImagesToShow(x).Images);
+end
+
+if ~isempty(PatternsToShow)
+    for x = 1:size(PatternsToShow,2)
+        CheckImage(PatternsToShow(x).Images);
+    end
+end
+
+% заполняем выходную структуру данными
+ProcessResults.ImagesToShow.Images = ImagesToShow;
+ProcessResults.PatternsToShow.Images = PatternsToShow;
+ProcessResults.StringOfImages = StringOfImages;
+ProcessResults.StringOfPatterns = StringOfPatterns;
+ProcessResults.StatisticsString = StatisticsString;
+ProcessResults.LABEL = LABEL;
+ProcessResults.Boxes = Boxes;
 
 
 % ПРОПИСЫВАЕТ СТРОЧКИ С КАДРОМ И ТЕКУЩИМ ВРЕМЕНЕМ ВИДЕО
@@ -2777,17 +3639,17 @@ handles.VideoFrameInfo.String = [num2str(FrameNumber) ' кадр'];
 
 
 % НАСТРАИВАЕТ РАЗМЕР ОСИ ПОД ВИДЕО/ИЗОБРАЖЕНИЕ
-function SetNewAxesPosition(Axes, ImageHeight, ImageWidth)
+function SetNewAxesPosition(Axes, HeightToSet, WidthToSet)
 
 % Axes - ось, в которую вставляем кадр/изорбажение
 % ImageHeight, ImageWidth - габариты кадра/изорбажения  
 
 assert(isappdata(Axes, 'InitPosition'), 'Axes указана не верно');
-assert(isnumeric(ImageHeight), 'Height - не число');
-assert(isnumeric(ImageWidth), 'Width - не число');
+assert(isnumeric(HeightToSet), 'Height - не число');
+assert(isnumeric(WidthToSet), 'Width - не число');
 
 % вычислим максимум из соотношений сторон изображения к сторонам осей
-MaxImageToAxesSideRation = GetMaxImageToAxesSideRation(Axes, ImageHeight, ImageWidth);
+MaxImageToAxesSideRation = GetMaxImageToAxesSideRation(Axes, HeightToSet, WidthToSet);
         
 % считываем начальный размер, выделенный для оси
 InitAxesPosition = getappdata(Axes,'InitPosition'); 
@@ -2795,11 +3657,11 @@ InitAxesPosition = getappdata(Axes,'InitPosition');
 % если изображение не влезает в ось - урезаем его
 if MaxImageToAxesSideRation > 1
     
-    AxesNewWidth = ImageWidth / MaxImageToAxesSideRation ;
-    AxesNewHeight = ImageHeight / MaxImageToAxesSideRation ;
+    AxesNewWidth = WidthToSet / MaxImageToAxesSideRation ;
+    AxesNewHeight = HeightToSet / MaxImageToAxesSideRation ;
 else
-    AxesNewWidth = ImageWidth;
-    AxesNewHeight = ImageHeight;
+    AxesNewWidth = WidthToSet;
+    AxesNewHeight = HeightToSet;
 end
 
 % новая позиция отцентрированной оси
@@ -2906,8 +3768,8 @@ function CorrectValue = LimitCheck(CheckValue, Limit, IsTopLimit)
 
 % CheckValue - проверяемое число
 % Limit - предел
-% IsTopLimit = true - предел сверху
-% IsTopLimit = false - предел снизу
+% IsTopLimit == true - предел сверху
+% IsTopLimit == false - предел снизу
 % CorrectValue - откорректированное значение в соответствии с пределом
 
 assert(isnumeric([CheckValue Limit]), 'Value не числовой');            
@@ -3109,429 +3971,22 @@ IsRusLanguage = strcmp(handles.RussianLanguageMenu.Checked,'on');
 
     
 % СОХРАНЯЕТ ДАННЫЕ В ФАЙЛ-ИЗОБРАЖЕНИЕ
-function SaveImage(Image, FrameNumber, IsRusLanguage)
+function SaveImage(Image, IsRusLanguage)
 
 assert(islogical(IsRusLanguage),'Флаг языка не логический');
-assert(isinteger(FrameNumber),'FrameNumber - не целочисленный параметр');
 CheckImage(Image);
 
 if IsRusLanguage    % по языку    
-    [FileName, PathName] = uiputfile(['кадр № ' num2str(FrameNumber) '.png'],'Сохранить кадр/изображение');
+    [FileName, PathName] = uiputfile({'*.jpeg';'*.jpg';'*.tif';'*.tiff';'*.bmp';'*.png'},...
+                        'Сохранить кадр/изображение');
 else
-    [FileName, PathName] = uiputfile(['frame № ' num2str(FrameNumber) '.png'],'Save frame/image');
+    [FileName, PathName] = uiputfile({'*.jpeg';'*.jpg';'*.tif';'*.tiff';'*.bmp';'*.png'},...
+                        'Save frame/image');
 end
 
 if FileName~=0
     imwrite(Image,[PathName FileName]);
 end    
-    
-
-% ФУНКЦИЯ ОБРАБОТКИ ИЗОБРАЖЕНИЯ/КАДРА
-function ProcessResults = ComputerVisionProcessing(Image, ProcessParameters, IsRusLanguage)
-
-assert(islogical(IsRusLanguage),'Флаг языка не логический');
-assert(isstruct(ProcessParameters), 'ProcessParameters - не структура');
-assert(~isempty(ProcessParameters), 'Передана пустая структура параматеров обработки');
-CheckImage(Image);
-
-ProcessResults = struct();
-
-% заполняю 1ое изображение и 1ю строку списка промежуточных результатов
-ImagesToShow = struct('Images',Image);   
-StringOfImages = ReturnRusOrEngString(IsRusLanguage, 'Оригинал', 'Original image');
-
-% создаем пустышки для выходных аргументов 
-NewPattern = [];     
-Boxes = []; 
-StatisticsString = []; 
-LABEL = [];
-
-% использую компактную форму записи
-X0 = ProcessParameters.X0;
-X1 = ProcessParameters.X1;
-Y0 = ProcessParameters.Y0;
-Y1 = ProcessParameters.Y1;      
-
-% в зависимости от метода обработки - обрабатываю
-switch ProcessParameters.ComputerVisionMethod
-    
-    case {'Распознавание текста','Optical character recognition'}        
-        
-        results = ocr(  Image(Y0:Y1, X0:X1, :),...
-                        'TextLayout',ProcessParameters.layout,...
-                        'Language',ProcessParameters.lang);
-        
-        % найденный текст и его координаты 
-        StatisticsString = results.Words;       
-        Boxes = results.WordBoundingBoxes; 
-        
-        % убираем слабые результаты
-        Boxes = Boxes(results.WordConfidences > ProcessParameters.thresh,:);    
-        StatisticsString = StatisticsString(results.WordConfidences > ProcessParameters.thresh);
-        
-        % делаем координаты текста абсолютными для пользовательского файла
-        Boxes(:,1) = Boxes(:,1) + X0;
-        Boxes(:,2) = Boxes(:,2) + Y0;                          
-        
-        if isempty(StatisticsString)            
-            StatisticsString = ReturnRusOrEngString(IsRusLanguage, 'нет результатов', 'no results');            
-        end
-        
-    case {'Чтение штрих-кода','Barcode reading'} 
-        
-    case {'Поиск областей с текстом','Text region detection'}  
-        
-    case {'Анализ пятен','Blob analysis'} 
-        
-        if size(Image,3) > 1            
-            GrayImage = rgb2gray(Image);
-        else
-            GrayImage = Image;
-        end
-        
-        % если не ч/б, проведем бинаризацию
-        if ~all( all( GrayImage == 0 | GrayImage == 1 ))    
-            
-            switch ProcessParameters.BinarizationType
-                
-                case {'Адаптивная', 'Adaptive'}      
-                    
-                    ImageBW = imbinarize(GrayImage,'adaptive',...
-                                        'Sensitivity',ProcessParameters.SensOrThersh,...
-                                        'ForegroundPolarity',ProcessParameters.Foreground);
-                                    
-                case {'Глобальная (Оцу)', 'Global (Otsu)'}                     
-                    ImageBW = imbinarize(GrayImage);
-                    
-                case {'Глобальная', 'Global'}                       
-                    ImageBW = imbinarize(GrayImage, ProcessParameters.SensOrThersh);   
-                
-                otherwise
-                    assert(0, 'Выбран некорректный метод бинаризации');
-            end
-        end
-        
-        % задаем свойства объекта BlobAnalysis
-        hBlob = vision.BlobAnalysis;
-        hBlob.AreaOutputPort = true;
-        hBlob.CentroidOutputPort = true;
-        hBlob.BoundingBoxOutputPort = false;
-        
-        hBlob.PerimeterOutputPort = true;
-        hBlob.LabelMatrixOutputPort = true;
-        hBlob.Connectivity =        ProcessParameters.Conn;
-        hBlob.MaximumCount =        ProcessParameters.MaximumCount;
-        hBlob.MinimumBlobArea =     ProcessParameters.MinimumBlobArea;
-        hBlob.MaximumBlobArea =     ProcessParameters.MaximumBlobArea;
-        hBlob.ExcludeBorderBlobs =  ProcessParameters.BorderBlobs;
-        
-        % получаем площадь, центр, периметр и разметку пятен
-        [AREA,CENTEROID,PERIMETER,LABEL] = step(hBlob, logical(ImageBW)); 
-        
-        CENTEROID = round(CENTEROID);
-        PERIMETER = round(PERIMETER);
-                
-        % создаем и заполняем список пятен
-        StatisticsString = cell(1,size(AREA,1));
-        
-        for x = 1:size(AREA,1)
-            
-            StatisticsString{x} = ReturnRusOrEngString(IsRusLanguage,...
-                                ['Пятно № ' num2str(x) ...
-                                ': площадь / периметр = ' num2str(AREA(x))...
-                                ' / ' num2str(PERIMETER(x)) ' (пикс.)'],...
-                                ...
-                                ['Blob № ' num2str(x) ...
-                                ': area / perimeter = ' num2str(AREA(x))...
-                                ' / ' num2str(PERIMETER(x)) ' (pix.)']); 
-        end   
-        
-        if isempty(AREA)       
-            StatisticsString = ReturnRusOrEngString(IsRusLanguage, ...
-                                        'нет результатов', 'no results');
-        end 
-        
-        %-----------------------------------------------------------------------------------
-        % заполняю массив ImagesToShow и список операций обработок
-        
-        ImagesToShow(end+1).Images = im2double(ImageBW);        
-        StringOfImages{end+1} = ReturnRusOrEngString(IsRusLanguage,...
-                                    'Результат бинаризации',...
-                                    'Binarization result');
-                                
-        % запоминаю изображение полутоновое с крестами в центрах пятен
-        ImagesToShow(end+1).Images = ...
-            insertMarker(im2double(ImageBW), CENTEROID, 'Color', 'blue');
-            
-        StringOfImages{end+1} = ReturnRusOrEngString(IsRusLanguage,...
-                                'Обнаруженные пятна на бинарном изображении',...
-                                'Recognized blobs on binary image');
-        
-        % запоминаю изображение исходное с крестами в центрах пятен
-        ImagesToShow(end+1).Images = ...
-            insertMarker(ImagesToShow(1).Images, CENTEROID, 'Color', 'blue');
-                
-        StringOfImages{end+1} = ReturnRusOrEngString(IsRusLanguage,...
-                                'Обнаруженные пятна на оригинале',...
-                                'Recognized blobs on original image');         
-        
-    case {'Распознавание лиц','Face detection'}
-        
-        % объект-детектор
-        faceDetector = vision.CascadeObjectDetector(...
-                            'MinSize',ProcessParameters.MinSize,...
-                            'MaxSize',ProcessParameters.MaxSize,...    
-                            'ScaleFactor',ProcessParameters.ScaleFactor,...    
-                            'MergeThreshold',ProcessParameters.MergeThreshold,...    
-                            'ClassificationModel',ProcessParameters.Model,...    
-                            'UseROI', true);
-        
-        ROI = [X0 Y0 X1-X0 Y1-Y0];
-        
-        % извлекаем лица
-        Boxes = step(faceDetector, Image, ROI);    % размерность Nx4
-        
-        % делаем координаты абсолютными для пользовательского файла
-        Boxes(:,1) = Boxes(:,1) + X0;
-        Boxes(:,2) = Boxes(:,2) + Y0;       
-        
-        % вставляем прямоугольники с описаниями
-        ImageWithFaces = insertShape(Image, 'rectangle', Boxes, ...
-                            'LineWidth', 2, 'Color', 'blue', 'Opacity', 1);
-        
-        % запоминаю картинку 
-        ImagesToShow(end+1).Images = ImageWithFaces;                
-        StringOfImages{end+1} = ReturnRusOrEngString(IsRusLanguage,...
-                                                'Обнаруженные лица',...
-                                                'Recognized faces');   
-                            
-    case {'Распознавание людей','People detection'}
-        
-    case {'Распознавание объектов','Object detection'}
-        
-        if size(Image,3) == 3
-            GrayImage = rgb2gray(Image);
-        end
-        
-        Pattern = ProcessParameters.Pattern;
-        
-        % нужны полутоновые картинки
-        if size(Pattern,3) == 3
-            GrayPattern = rgb2gray(Pattern);
-        end
-        
-        % считываем тип детектора для ключевых точек и детектируем их
-        switch ProcessParameters.DetectorType
-            
-            case 1
-                
-                PatternPoints = detectMSERFeatures(GrayPattern,...
-                                'MaxAreaVariation',ProcessParameters.Slider1Value,...
-                                'ThresholdDelta',ProcessParameters.Slider2Value,...
-                                'RegionAreaRange',...
-                                [ProcessParameters.Slider3Value ProcessParameters.Slider4Value]);
-                
-                ScenePoints = detectMSERFeatures(GrayImage,...
-                                'MaxAreaVariation',ProcessParameters.Slider1Value,...
-                                'ThresholdDelta',ProcessParameters.Slider2Value,...
-                                'RegionAreaRange',...
-                                [ProcessParameters.Slider3Value ProcessParameters.Slider4Value]);
-                
-            case 2
-                
-                PatternPoints = detectBRISKFeatures(GrayPattern,...
-                                'MinContrast',ProcessParameters.Slider1Value,...
-                                'NumOctaves',ProcessParameters.Slider3Value,...
-                                'MinQuality',ProcessParameters.Slider2Value);
-                
-                ScenePoints = detectBRISKFeatures(GrayImage,...
-                                'MinContrast',ProcessParameters.Slider1Value,...
-                                'NumOctaves',ProcessParameters.Slider3Value,...
-                                'MinQuality',ProcessParameters.Slider2Value);
-                
-            case 3
-                
-                PatternPoints = detectFASTFeatures(GrayPattern,...
-                                'MinContrast',ProcessParameters.Slider1Value,...
-                                'MinQuality',ProcessParameters.Slider2Value);
-                
-                ScenePoints = detectFASTFeatures(GrayImage,...
-                                'MinContrast',ProcessParameters.Slider1Value,...
-                                'MinQuality',ProcessParameters.Slider2Value);
-                
-            case 4
-                
-                PatternPoints = detectHarrisFeatures(GrayPattern,...
-                                'FilterSize',ProcessParameters.Slider3Value,...
-                                'MinQuality',ProcessParameters.Slider2Value);
-                
-                ScenePoints = detectHarrisFeatures(GrayImage,...
-                                'FilterSize',ProcessParameters.Slider3Value,...
-                                'MinQuality',ProcessParameters.Slider2Value);
-                
-            case 5
-                
-                PatternPoints = detectMinEigenFeatures(GrayPattern,...
-                                'FilterSize',ProcessParameters.Slider3Value,...
-                                'MinQuality',ProcessParameters.Slider2Value);
-                
-                ScenePoints = detectMinEigenFeatures(GrayImage,...
-                                'FilterSize',ProcessParameters.Slider3Value,...
-                                'MinQuality',ProcessParameters.Slider2Value);
-                
-            case 6      
-                
-                PatternPoints = detectSURFFeatures(GrayPattern,...
-                                'MetricThreshold',ProcessParameters.Slider2Value,...
-                                'NumOctaves',ProcessParameters.Slider3Value,...
-                                'NumScaleLevels',ProcessParameters.Slider4Value);
-                
-                ScenePoints = detectSURFFeatures(GrayImage,...
-                                'MetricThreshold',ProcessParameters.Slider2Value,...
-                                'NumOctaves',ProcessParameters.Slider3Value,...
-                                'NumScaleLevels',ProcessParameters.Slider4Value);
-                SURFSize = 64;
-                
-            case 7                  
-                
-                PatternPoints = detectSURFFeatures(GrayPattern,...
-                                'MetricThreshold',ProcessParameters.Slider2Value,...
-                                'NumOctaves',ProcessParameters.Slider3Value,...
-                                'NumScaleLevels',ProcessParameters.Slider4Value);
-                            
-                ScenePoints = detectSURFFeatures(GrayImage,...
-                                'MetricThreshold',ProcessParameters.Slider2Value,...
-                                'NumOctaves',ProcessParameters.Slider3Value,...
-                                'NumScaleLevels',ProcessParameters.Slider4Value);
-                SURFSize = 128;
-                
-            otherwise
-                assert(0,'Что то пошло не так...Выбрали несуществующую строчку меню');
-        end
-        
-        % извлекаем фичи образца и сцены
-        % для surf отдельный вызов
-        if ProcessParameters.DetectorType == 6 || ProcessParameters.DetectorType == 7
-            
-            [PatternFeatures, PatternPoints] = extractFeatures(...
-                GrayPattern,PatternPoints,...
-                'Upright',ProcessParameters.UpRight, 'SURFSize',SURFSize);
-            
-            [SceneFeatures, ScenePoints] = extractFeatures(GrayImage, ScenePoints,...
-                'Upright',ProcessParameters.UpRight, 'SURFSize',SURFSize);
-        else
-            
-            [PatternFeatures, PatternPoints] = extractFeatures(...
-                GrayPattern,PatternPoints,'Upright',ProcessParameters.UpRight);
-            
-            [SceneFeatures, ScenePoints] = extractFeatures(GrayImage, ScenePoints,...
-                'Upright',ProcessParameters.UpRight);
-            
-        end
-        
-        % сравниваем фичи, выделяя пары похожих
-        % для бинарных точе выpов без метрики
-        if      ProcessParameters.DetectorType == 1 ||...
-                ProcessParameters.DetectorType == 6 || ...
-                ProcessParameters.DetectorType == 7
-            
-            Pairs = matchFeatures(PatternFeatures, SceneFeatures, ...
-                        'Method', ProcessParameters.MatchMethod,...
-                        'MatchThreshold',ProcessParameters.MatchThreshold,...
-                        'MaxRatio',ProcessParameters.MaxRatio,...
-                        'Metric',ProcessParameters.Metric, 'Unique',...
-                        ProcessParameters.UseUnique);
-                    
-        else
-            
-            Pairs = matchFeatures(PatternFeatures, SceneFeatures, ...
-                        'ComputerVisionMethod', ProcessParameters.MatchMethod,...
-                        'MatchThreshold',ProcessParameters.MatchThreshold,...
-                        'MaxRatio',ProcessParameters.MaxRatio,...
-                        'Unique',ProcessParameters.UseUnique);
-            
-        end
-        
-        % извлекаю из всех доступных точек только совпавшие по их адресам в Pairs
-        MatchedPatternPoints = PatternPoints(Pairs(:, 1), :);
-        MatchedScenePoints = ScenePoints(Pairs(:, 2), :);
-        
-        % провожу анализ их геометрических искажений
-        [~,~,ResultPoints,~] = estimateGeometricTransform(...
-                                MatchedPatternPoints, ...
-                                MatchedScenePoints,...
-                                ProcessParameters.TransformationType,... 
-                                'MaxNumTrials',ProcessParameters.MaxNumTrials, ...
-                                'Confidence',ProcessParameters.Confidence,...
-                                'MaxDistance', ProcessParameters.MaxDistance);      
-        
-        % в ось образца вставляю его со всеми отмеченными ключевыми точками 
-        NewPattern = insertMarker(GrayPattern, round(PatternPoints.Location), 'Color', 'blue'); 
-        
-        %-----------------------------------------------------------------------------------
-        % заполняю массив ImagesToShow и список операций обработок
-        
-        if size(Image,3) == 3
-            GrayImage = rgb2gray(Image);
-            
-            ImagesToShow(end+1).Images = GrayImage;
-            StringOfImages{end+1} = ReturnRusOrEngString(IsRusLanguage,...
-                                        'Полутоновое изображение',...
-                                        'Grayscale image');
-        end         
-        
-        ImagesToShow(end+1).Images = insertMarker(GrayImage, ScenePoints, 'Color', 'blue');                                    
-        StringOfImages{end+1} = ReturnRusOrEngString(IsRusLanguage,...
-                                    'Все найденные ключевые точки',...
-                                    'All found keypoints');                                
-                                         
-        ImagesToShow(end+1).Images = insertMarker(GrayImage, ScenePoints(Pairs(:,2),:), 'Color', 'blue');             
-        StringOfImages{end+1} = ReturnRusOrEngString(IsRusLanguage,...
-                                    'Совпадающие ключевые точки',...
-                                    'Matched keypoints');                                
-        
-        ImagesToShow(end+1).Images = insertMarker(GrayImage, ResultPoints, 'Color', 'blue');             
-        StringOfImages{end+1} = ReturnRusOrEngString(IsRusLanguage,...
-                                    'Корректные совпадающие ключевые точки (полутоновое изображение)',...
-                                    'Сorrect matched keypoints (grayscale image)');
-                                
-        if size(Image,3) == 3
-            
-            ImagesToShow(end+1).Images = insertMarker(Image, ResultPoints, 'Color', 'blue');            
-            StringOfImages{end+1} = ReturnRusOrEngString(IsRusLanguage,...
-                        'Корректные совпадающие ключевые точки (исходное изображение)',...
-                        'Сorrect matched keypoints (original image)');
-        end
-        
-    case {'Создание 3D-изображения','3-D image creation'}
-        
-    case {'Обработка видео','Video processing'}
-        
-    case {'Создание панорамы','Panorama creation'}
-        
-    case {'Распознавание движения','Motion detection'}
-        
-    otherwise
-        assert(0, 'Ошибка в обращении к методам обработки');
-        
-end   
-
-% проверяем выходные изображения
-for x = 1:size(ImagesToShow,2)
-    CheckImage(ImagesToShow(x).Images);
-end
-
-if ~isempty(NewPattern)
-    CheckImage(NewPattern);
-end
-
-% заполняем выходную структуру данными
-ProcessResults.ImagesToShow.Images = ImagesToShow;
-ProcessResults.StringOfImages = StringOfImages;
-ProcessResults.NewPattern = NewPattern;
-ProcessResults.StatisticsString = StatisticsString;
-ProcessResults.LABEL = LABEL;
-ProcessResults.Boxes = Boxes;
 
 
 % ФУНКЦИЯ ОТОБРАЖЕНИЯ ПОЛЬЗОВАТЕЛЬСКОГО ФАЙЛА
@@ -3658,6 +4113,13 @@ switch ErrorCode
                         '"Computer Vision System Toolbox 7.3" is missing.'; ...
                         'Application will be closed. Good luck to you, buddy.';...
                         'Set up this toolbox to run application.'];
+                    
+    case 'ImageAndPatternSizesAreNotEqual'
+        
+       InfoStirng = ReturnRusOrEngString(IsRusLanguage,...
+                                'Размеры пользовательского изображения и образца должны совпадать',...
+                                'Sizes of user image and pattern should be equal');  
+            
     
     otherwise
         
@@ -3797,12 +4259,11 @@ switch ComputerVisionMethod
         Pattern = Image(X0Y0X1Y1Coords(2):X0Y0X1Y1Coords(4), X0Y0X1Y1Coords(1):X0Y0X1Y1Coords(3), :);
         
         image(Pattern,'Parent',handles.PatternAxes);
-        handles.PatternAxes.Visible = 'off';
+        handles.PatternAxes.Visible = 'off';     
         
-        setappdata(handles.KAACVP,'Pattern',Pattern);
-        
-        % размер оси будет установлен в соответствие со статусом кнопки
-        ZoomButton_Callback([], [], handles);
+        % сохраняю образцы 
+        PatternsToShow = struct('Images', Pattern);
+        setappdata(handles.KAACVP, 'PatternsToShow',PatternsToShow);        
         
         % разблокируем элементы, чтобы можно было вручную задавать изменения ROI        
         set([...
@@ -3812,13 +4273,17 @@ switch ComputerVisionMethod
             handles.ROIy1;...
             ],'Enable','on');       
         
-        handles.ShowPatternImageMenu.Visible = 'on';
+        handles.ShowPatternMenu.Visible = 'on';
+        
+        % размер оси будет установлен в соответствие со статусом кнопки
+        ZoomButton_Callback([], [], handles);          
 end
 
 
 % БЛОКИРУЕТ ЭЛЕМЕНТЫ ИНТЕРФЕЙСА
 function DoyouWantToBlockInterface(WantToBlockIt, handles, IsVideo)
 
+return
 % постоянно блокировать интерфейс для видео - гиблое дело...
 assert(islogical(IsVideo), 'BlockIt на входе не логический');
 if IsVideo
@@ -3847,7 +4312,7 @@ drawnow;
 
 
 % ДЕЛАЕТ ВИДИМЫМ ИНТЕРФЕЙСНЫЙ СЛАЙДЕР ПАРАМЕТРА
-function SetParSlidersVisibleStatus(ParSliderNumbersList, ShowIt, handles)
+function SetParSlidersVisibleStatus(ParSliderNumbersList, ShowOrHide, handles)
 
 % число слайдеров параметров в интерфейса
 NumOfParSliders = 9;
@@ -3859,7 +4324,7 @@ assert(isstruct(handles),'Передана не структура элементов интерфейса');
 
 ParSliderNumbersList = uint8(ParSliderNumbersList);
 
-if ShowIt
+if ShowOrHide
     Status = 'on'; 
 else
     Status = 'off'; 
@@ -3873,7 +4338,7 @@ end
 
 
 % ДЕЛАЕТ ВИДИМЫМ ИНТЕРФЕЙСНОЕ МЕНЮ ПАРАМЕТРА
-function SetParMenusVisibleStatus(ParMenuNumbersList, ShowIt, handles)
+function SetParMenusVisibleStatus(ParMenuNumbersList, ShowOrHide, handles)
 
 % число меню параметров интерфейса
 NumOfParMenu = 4;
@@ -3885,7 +4350,7 @@ assert(isstruct(handles),'Передана не структура элементов интерфейса');
 
 ParMenuNumbersList = uint8(ParMenuNumbersList);
 
-if ShowIt
+if ShowOrHide
     Status = 'on'; 
 else
     Status = 'off'; 
@@ -3910,4 +4375,25 @@ set([...
     handles.ROIButton;...
     handles.ROIText;...
     ],'Visible','on');
+
+
+% ВСТАВЛЯЕТ КЛЮЧЕВЫЕ ТОЧКИ И ТЕКСТ СО СТАТИСТИКОЙ
+function MarkedImage = InsertKeypointsAndText(Image, Points)
+
+MarkedImage = insertMarker(Image, Points, 'Color', 'blue');
+
+MarkedImage = insertText(MarkedImage, [1 1],...
+                        num2str(size(Points,1)),...
+                        'FontSize',18,...
+                        'BoxColor','white',...
+                        'TextColor','black',...
+                        'BoxOpacity',0.7...
+                        );
+
+
+
+
+
+
+
 
